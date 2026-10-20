@@ -125,6 +125,28 @@ evaluate_user() {
   request POST /api/evaluate '{"flagKey":"smoke-flag","userId":"user-123"}'
 }
 
+ofrep_evaluate() {
+  node --input-type=module -e '
+    const [base, key, flag, user] = process.argv.slice(1);
+    const response = await fetch(`${base}/ofrep/v1/evaluate/flags/${flag}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": key,
+      },
+      body: JSON.stringify({ context: { targetingKey: user } }),
+    });
+    const text = await response.text();
+
+    if (!response.ok) {
+      console.error(`HTTP ${response.status}: ${text}`);
+      process.exit(1);
+    }
+
+    console.log(text);
+  ' "$BASE_URL" "$1" "$2" "$3"
+}
+
 echo "Switchboard Docker smoke test"
 echo "Project: ${PROJECT_NAME}"
 echo "Base URL: ${BASE_URL}"
@@ -161,7 +183,32 @@ first_reason=$(json_value "$first_evaluation" reason)
 echo "bucket=${first_bucket} enabled=${first_enabled} reason=${first_reason}"
 
 echo
-echo "== 6. Restart and re-evaluate =="
+echo "== 6. Create v2 project/environment/flag/key =="
+v2_project=$(request POST /api/v1/projects \
+  '{"key":"smoke-project","name":"Smoke project"}')
+v2_environment=$(request POST /api/v1/projects/smoke-project/environments \
+  '{"key":"production","name":"Production"}')
+v2_flag=$(request POST /api/v1/projects/smoke-project/environments/production/flags \
+  '{"key":"smoke-v2-flag","description":"Smoke v2 flag","enabled":true,"rolloutPercentage":100}')
+v2_key_response=$(request POST /api/v1/projects/smoke-project/environments/production/api-keys \
+  '{"name":"smoke server"}')
+v2_key=$(json_value "$v2_key_response" key)
+echo "v2 project: ${v2_project}"
+echo "v2 environment: ${v2_environment}"
+echo "v2 flag: ${v2_flag}"
+echo "v2 key prefix: $(json_value "$v2_key_response" prefix)"
+expect_equal "v2.flag.key" "smoke-v2-flag" "$(json_value "$v2_flag" key)"
+expect_equal "v2.flag.enabled" "true" "$(json_value "$v2_flag" enabled)"
+
+echo
+echo "== 7. Evaluate v2 via OFREP =="
+v2_first=$(ofrep_evaluate "$v2_key" "smoke-v2-flag" "user-123")
+echo "v2 ofrep: ${v2_first}"
+v2_first_value=$(json_value "$v2_first" value)
+expect_equal "v2.first.value" "true" "$v2_first_value"
+
+echo
+echo "== 8. Restart and re-evaluate =="
 run "${COMPOSE[@]}" restart
 wait_for_health
 
@@ -176,8 +223,12 @@ expect_equal "restart.bucket" "$first_bucket" "$(json_value "$restart_evaluation
 expect_equal "restart.enabled" "$first_enabled" "$(json_value "$restart_evaluation" enabled)"
 expect_equal "restart.reason" "$first_reason" "$(json_value "$restart_evaluation" reason)"
 
+v2_restart=$(ofrep_evaluate "$v2_key" "smoke-v2-flag" "user-123")
+echo "v2 after restart: ${v2_restart}"
+expect_equal "v2.restart.value" "true" "$(json_value "$v2_restart" value)"
+
 echo
-echo "== 7. down (volume kept) + up and re-evaluate =="
+echo "== 9. down (volume kept) + up and re-evaluate =="
 run "${COMPOSE[@]}" down
 run "${COMPOSE[@]}" up -d
 wait_for_health
@@ -193,8 +244,12 @@ expect_equal "down-up.bucket" "$first_bucket" "$(json_value "$recreated_evaluati
 expect_equal "down-up.enabled" "$first_enabled" "$(json_value "$recreated_evaluation" enabled)"
 expect_equal "down-up.reason" "$first_reason" "$(json_value "$recreated_evaluation" reason)"
 
-echo
-echo "Smoke test passed: flag and evaluation survived restart and down/up."
+v2_recreated=$(ofrep_evaluate "$v2_key" "smoke-v2-flag" "user-123")
+echo "v2 after down/up: ${v2_recreated}"
+expect_equal "v2.down-up.value" "true" "$(json_value "$v2_recreated" value)"
 
 echo
-echo "== 8. Clean up (down -v via EXIT trap) =="
+echo "Smoke test passed: legacy and v2 flags survived restart and down/up."
+
+echo
+echo "== 10. Clean up (down -v via EXIT trap) =="

@@ -605,11 +605,17 @@ The migrated legacy flag was then read through `/api/flags`:
 ### Docker Compose v2 smoke
 
 `npm run smoke` builds the Postgres-backed stack, waits for health, creates a
-legacy flag, evaluates it, restarts the stack, runs `down`/`up`, and verifies
-the same bucket/result. Result:
+legacy flag and a v2 project/environment/flag/API key, evaluates both, restarts
+the stack, runs `down`/`up`, and verifies the same results. Result:
 
 ```text
-Smoke test passed: flag and evaluation survived restart and down/up.
+v2 ofrep: {"key":"smoke-v2-flag","value":true,"reason":"SPLIT","variant":"enabled"}
+OK: v2.first.value = true
+v2 after restart: {"key":"smoke-v2-flag","value":true,"reason":"SPLIT","variant":"enabled"}
+OK: v2.restart.value = true
+v2 after down/up: {"key":"smoke-v2-flag","value":true,"reason":"SPLIT","variant":"enabled"}
+OK: v2.down-up.value = true
+Smoke test passed: legacy and v2 flags survived restart and down/up.
 ```
 
 ### v2 UI
