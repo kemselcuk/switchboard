@@ -274,7 +274,7 @@ settings and timestamps, and is idempotent. See
 ```bash
 npm test              # v1 + v2 SQLite tests
 npm run test:db       # Postgres integration (requires DATABASE_URL)
-npm run test:contract # OFREP OpenAPI contract tests
+npm run test:contract # OFREP contract + official @openfeature/ofrep-provider test
 npm run test:workspaces # SDK/provider build + tests
 npm run smoke         # Docker Compose + Postgres smoke test
 ```

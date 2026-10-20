@@ -15,7 +15,7 @@
     "dev": "node --watch --env-file=.env src/server.js",
     "test": "node --test --test-reporter=spec test/*.test.js test/v2/*.test.js test/db/*.test.js test/contract/*.test.js",
     "test:db": "node --test --test-reporter=spec test/db/postgres.test.js",
-    "test:contract": "node --test --test-reporter=spec test/contract/ofrep.test.js",
+    "test:contract": "node --test --test-reporter=spec test/contract/*.test.js",
     "migrate": "node scripts/migrate.mjs",
     "migrate:legacy": "node scripts/migrate-sqlite-to-postgres.mjs",
     "build": "npm run build --workspace @switchboard/sdk && npm run build --workspace @switchboard/openfeature-provider",
@@ -34,6 +34,7 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@openfeature/ofrep-provider": "^0.2.5",
     "ajv": "^8.20.0",
     "playwright-core": "^1.64.1",
     "tsx": "^4.23.15",
