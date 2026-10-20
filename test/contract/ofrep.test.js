@@ -4,8 +4,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import Ajv from 'ajv';
+import Fastify from 'fastify';
 import { parse } from 'yaml';
 
+import { AppError } from '../../src/errors.js';
+import { ofrepErrorHandler } from '../../src/v2/routes/ofrep.js';
 import {
   createApiKey,
   createEnvironment,
@@ -99,4 +102,150 @@ test('OFREP not-found response matches the official schema', async (t) => {
 
   assert.equal(response.statusCode, 404);
   assert.equal(validator('flagNotFound')(response.json()), true);
+});
+
+test('quoted bulk ETag round-trips and is resent on 304', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  await createFlag(app, 'demo', 'production');
+  const key = await createApiKey(app, 'demo', 'production');
+
+  const first = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(first.statusCode, 200);
+  assert.match(first.headers.etag, /^"[0-9a-f]{16}"$/);
+
+  const second = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: {
+      'x-api-key': key.key,
+      'if-none-match': first.headers.etag,
+    },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(second.statusCode, 304);
+  assert.equal(second.headers.etag, first.headers.etag);
+  assert.equal(second.body, '');
+});
+
+test('bulk ETag is scoped to the project key', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app, 'demo');
+  await createEnvironment(app, 'demo');
+  await createFlag(app, 'demo', 'production', { key: 'same-flag' });
+  const demoKey = await createApiKey(app, 'demo', 'production');
+
+  await createProject(app, 'other', 'Other');
+  await createEnvironment(app, 'other');
+  await createFlag(app, 'other', 'production', { key: 'same-flag' });
+  const otherKey = await createApiKey(app, 'other', 'production');
+
+  async function bulk(apiKey) {
+    return app.inject({
+      method: 'POST',
+      url: '/ofrep/v1/evaluate/flags',
+      headers: { 'x-api-key': apiKey },
+      payload: { context: { targetingKey: 'user-1' } },
+    });
+  }
+
+  const demo = await bulk(demoKey.key);
+  const other = await bulk(otherKey.key);
+
+  assert.equal(demo.statusCode, 200);
+  assert.equal(other.statusCode, 200);
+  assert.notEqual(demo.headers.etag, other.headers.etag);
+});
+
+test('single OFREP 400 matches the evaluationFailure schema', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  const key = await createApiKey(app, 'demo', 'production');
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/new-checkout',
+    headers: { 'x-api-key': key.key },
+    payload: { context: 'not-an-object' },
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.json().key, 'new-checkout');
+  assert.equal(validator('evaluationFailure')(response.json()), true);
+});
+
+test('bulk OFREP 400 matches the bulkEvaluationFailure schema', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  const key = await createApiKey(app, 'demo', 'production');
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: { 'x-api-key': key.key },
+    payload: {},
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(validator('bulkEvaluationFailure')(response.json()), true);
+});
+
+test('OFREP storage failures use a general error body', async (t) => {
+  const { app, v2 } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  await createFlag(app, 'demo', 'production');
+  const key = await createApiKey(app, 'demo', 'production');
+
+  const original = v2.db.selectFrom.bind(v2.db);
+  v2.db.selectFrom = () => {
+    throw new Error('database unavailable');
+  };
+
+  t.after(() => {
+    v2.db.selectFrom = original;
+  });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/new-checkout',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.json(), {
+    errorDetails: 'Flag storage is unavailable',
+  });
+  assert.equal(validator('generalErrorResponse')(response.json()), true);
+});
+
+test('OFREP 500 uses the generalErrorResponse schema', async (t) => {
+  const app = Fastify();
+
+  app.setErrorHandler(ofrepErrorHandler);
+  app.post('/ofrep/v1/evaluate/flags/:key', async () => {
+    throw new Error('unexpected');
+  });
+
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/new-checkout',
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(response.statusCode, 500);
+  assert.equal(validator('generalErrorResponse')(response.json()), true);
 });

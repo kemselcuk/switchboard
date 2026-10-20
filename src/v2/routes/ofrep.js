@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { normalizeError, sendError } from '../../errors.js';
 import { createApiKeyAuthHook } from '../api-key-auth.js';
 import { evaluateBooleanFlag } from '../evaluator.js';
 import { createFlagRepository } from '../repositories/flags.js';
@@ -12,15 +13,77 @@ function evaluationKey(flag, context) {
   return `${flag.key}:${context?.targetingKey ?? 'anonymous'}:${flag.rolloutBasisPoints}:${flag.enabled}`;
 }
 
-function etagFor(flags, context) {
-  const value = flags
+function etagFor(projectKey, flags, context) {
+  const value = `${projectKey}|${flags
     .map((flag) => evaluationKey(flag, context))
-    .join('|');
+    .join('|')}`;
 
-  return createHash('sha256')
+  const hash = createHash('sha256')
     .update(value, 'utf8')
     .digest('hex')
     .slice(0, 16);
+
+  return `"${hash}"`;
+}
+
+function normalizeEtag(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  const unquoted = trimmed.startsWith('W/') ? trimmed.slice(2) : trimmed;
+
+  if (unquoted.startsWith('"') && unquoted.endsWith('"')) {
+    return unquoted.slice(1, -1);
+  }
+
+  return unquoted;
+}
+
+function matchesEtag(ifNoneMatch, etag) {
+  if (typeof ifNoneMatch !== 'string') {
+    return false;
+  }
+
+  const current = normalizeEtag(etag);
+
+  return ifNoneMatch
+    .split(',')
+    .map((value) => normalizeEtag(value))
+    .some((value) => value === current);
+}
+
+export function ofrepErrorHandler(error, request, reply) {
+  const { statusCode, code, message } = normalizeError(error);
+  const isBulk = request.params?.key === undefined;
+
+  if (statusCode >= 500) {
+    request.log.error(error);
+
+    return reply.code(statusCode).send({
+      errorDetails: statusCode === 503
+        ? 'Flag storage is unavailable'
+        : 'An internal server error occurred while processing the request',
+    });
+  }
+
+  if (statusCode === 400) {
+    if (isBulk) {
+      return reply.code(400).send({
+        errorCode: 'INVALID_CONTEXT',
+        errorDetails: message,
+      });
+    }
+
+    return reply.code(400).send({
+      key: request.params.key,
+      errorCode: 'INVALID_CONTEXT',
+      errorDetails: message,
+    });
+  }
+
+  return sendError(reply, statusCode, code, message);
 }
 
 function evaluationResponse(flag, result) {
@@ -35,6 +98,7 @@ function evaluationResponse(flag, result) {
 export async function ofrepRoutes(app, { db }) {
   const flags = createFlagRepository(db);
 
+  app.setErrorHandler(ofrepErrorHandler);
   app.addHook('onRequest', createApiKeyAuthHook(db));
 
   app.post(
@@ -74,11 +138,11 @@ export async function ofrepRoutes(app, { db }) {
       const { projectId, projectKey, environmentId } = request.apiKeyContext;
       const context = request.body.context;
       const list = await flags.listFlags(projectId, environmentId);
-      const etag = etagFor(list, context);
+      const etag = etagFor(projectKey, list, context);
       const ifNoneMatch = request.headers['if-none-match'];
 
-      if (ifNoneMatch === etag) {
-        return reply.code(304).send();
+      if (matchesEtag(ifNoneMatch, etag)) {
+        return reply.code(304).header('ETag', etag).send();
       }
 
       const evaluations = list.map((flag) => {

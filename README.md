@@ -203,6 +203,14 @@ curl -sS -X POST "$BASE/ofrep/v1/evaluate/flags" \
 OFREP 404 responses use `FLAG_NOT_FOUND`; invalid/revoked keys return `401`.
 The vendored contract is in [`docs/contracts/ofrep-openapi.yaml`](docs/contracts/ofrep-openapi.yaml).
 
+Validation errors use OFREP failure bodies: a single evaluation returns
+`{key, errorCode: "INVALID_CONTEXT", errorDetails}`, and bulk evaluation
+returns `{errorCode: "INVALID_CONTEXT", errorDetails}`. Unexpected `500`
+responses and storage `503` responses use `{errorDetails}`; storage failures
+never fall back to a flag value. Bulk responses include a quoted `ETag`;
+send it back as `If-None-Match` to receive `304 Not Modified` (the `ETag` is
+repeated on the 304).
+
 ## Legacy v1 API
 
 The original API is unchanged:

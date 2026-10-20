@@ -99,7 +99,7 @@ test('bulk evaluation returns flags and a stable ETag', async (t) => {
   assert.equal(first.statusCode, 200);
   assert.equal(Array.isArray(first.json().flags), true);
   assert.equal(first.json().flags.length, 1);
-  assert.equal(typeof first.headers.etag, 'string');
+  assert.match(first.headers.etag, /^"[0-9a-f]{16}"$/);
 
   const second = await app.inject({
     method: 'POST',
@@ -112,6 +112,7 @@ test('bulk evaluation returns flags and a stable ETag', async (t) => {
   });
 
   assert.equal(second.statusCode, 304);
+  assert.equal(second.headers.etag, first.headers.etag);
 });
 
 test('keeps project and environment isolation', async (t) => {

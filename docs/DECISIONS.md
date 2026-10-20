@@ -297,3 +297,26 @@ transaction, with retry on a concurrent unique conflict. Legacy responses use
   import; the import then allocates the next free number instead of
   overwriting rows.
 - `legacy_id` is not a v2 public identifier and is not used for evaluation.
+
+## ADR-020 — OFREP-native error bodies and quoted ETags
+
+**Context:** OFREP clients parse failure responses and conditional bulk
+responses. The generic `{error:{code,message}}` envelope and an unquoted ETag
+are not OFREP-shaped.
+
+**Decision:** The OFREP plugin installs its own error handler:
+- single `400` → `evaluationFailure` (`key`, `errorCode`, `errorDetails`);
+- bulk `400` → `bulkEvaluationFailure` (`errorCode`, `errorDetails`);
+- `500` and storage `503` → `generalErrorResponse` (`errorDetails`).
+OFREP has no 503 in the vendored spec; storage failures intentionally use
+`503` with `errorDetails` so callers can distinguish availability from a flag
+decision. Bulk ETags are quoted, based on project key, flag keys, targeting key,
+rollout, and enabled state; `If-None-Match` accepts quoted or unquoted values,
+and `304` repeats the `ETag` header.
+
+**Consequences:**
+- Official OFREP providers can parse errors and cache validators.
+- Authentication responses keep the shared envelope because the key hook sends
+  them directly.
+- ETag is a cache validator, not a security boundary; project key is included
+  to prevent cross-project validator reuse.
