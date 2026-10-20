@@ -14,13 +14,15 @@ const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? '127.0.0.1';
 const dbPath = process.env.DB_PATH ?? './data/switchboard.db';
 const databaseUrl = process.env.DATABASE_URL;
+const v2DbPath = process.env.V2_DB_PATH ?? './data/switchboard-v2.db';
+const useV2 = Boolean(databaseUrl) || process.env.SWITCHBOARD_V2 === 'true';
 const logLevel = process.env.LOG_LEVEL ?? 'info';
 
 let app;
 
-if (databaseUrl) {
+if (useV2) {
   try {
-    const v2 = await initializeV2Database({ databaseUrl });
+    const v2 = await initializeV2Database({ databaseUrl, dbPath: v2DbPath });
 
     app = buildApp({
       v2,
