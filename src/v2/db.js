@@ -23,13 +23,34 @@ const MIGRATION_FOLDER = fileURLToPath(
   new URL('../../db/migrations', import.meta.url),
 );
 
+export function parsePoolMax(value) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 export function createDatabase({
   databaseUrl,
   dbPath = ':memory:',
 } = {}) {
   if (databaseUrl) {
     const { Pool } = pg;
-    const pool = new Pool({ connectionString: databaseUrl });
+    const poolOptions = { connectionString: databaseUrl };
+    const poolMax = parsePoolMax(process.env.DATABASE_POOL_MAX);
+
+    if (poolMax !== undefined) {
+      poolOptions.max = poolMax;
+    }
+
+    const pool = new Pool(poolOptions);
     const db = new Kysely({
       dialect: new PostgresDialect({ pool }),
     });
