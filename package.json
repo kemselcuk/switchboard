@@ -21,6 +21,7 @@
     "build": "npm run build --workspace @switchboard/sdk && npm run build --workspace @switchboard/openfeature-provider",
     "test:workspaces": "npm run build && npm run test --workspaces --if-present",
     "demo": "node scripts/demo.mjs",
+    "predemo:v2": "npm run build",
     "demo:v2": "node scripts/demo-v2.mjs",
     "smoke": "bash scripts/smoke-docker.sh",
     "record:demo": "node scripts/record-demo.mjs"

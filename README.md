@@ -63,8 +63,12 @@ Then create a project/environment/flag/API key through the management API or
 run the demo setup:
 
 ```bash
-ADMIN_TOKEN=dev-token-change-me npm run demo:v2
+# ADMIN_TOKEN must match the running server (see .env)
+ADMIN_TOKEN="$ADMIN_TOKEN" npm run demo:v2
 ```
+
+`demo:v2` runs `npm run build` first, so the SDK/provider `dist` directories are
+created on a fresh `npm ci` checkout.
 
 ### Local: v1 legacy mode
 
@@ -117,7 +121,7 @@ const enabled = await client.getBooleanValue(
 With a v2 server running locally:
 
 ```bash
-ADMIN_TOKEN=dev-token-change-me npm run demo:v2
+ADMIN_TOKEN="$ADMIN_TOKEN" npm run demo:v2
 ```
 
 This creates `demo` / `production` / `new-checkout`, creates an environment API
@@ -144,7 +148,9 @@ Management endpoints require `Authorization: Bearer <ADMIN_TOKEN>`.
 ### Create project, environment, flag, and key
 
 ```bash
-export ADMIN_TOKEN=dev-token-change-me
+set -a
+. ./.env
+set +a
 export BASE=http://localhost:3000
 
 curl -sS -X POST "$BASE/api/v1/projects" \
