@@ -13,10 +13,11 @@
   "scripts": {
     "start": "node --env-file=.env src/server.js",
     "dev": "node --watch --env-file=.env src/server.js",
-    "test": "node --test --test-reporter=spec",
+    "test": "node --test --test-reporter=spec test/*.test.js test/v2/*.test.js test/db/*.test.js test/contract/*.test.js",
     "test:db": "node --test --test-reporter=spec test/db/postgres.test.js",
     "test:contract": "node --test --test-reporter=spec test/contract/ofrep.test.js",
     "migrate": "node scripts/migrate.mjs",
+    "migrate:legacy": "node scripts/migrate-sqlite-to-postgres.mjs",
     "build": "npm run build --workspace @switchboard/sdk && npm run build --workspace @switchboard/openfeature-provider",
     "test:workspaces": "npm run build && npm run test --workspaces --if-present",
     "demo": "node scripts/demo.mjs",

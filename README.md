@@ -2,391 +2,311 @@
 
 # Switchboard
 
-A small, single-environment **feature flag** service. Boolean flags, full
-on/off control, and deterministic percentage rollouts.
+A small, self-hosted feature flag service with projects, environments,
+deterministic percentage rollouts, and an **OpenFeature/OFREP-compatible**
+evaluation API.
 
-The same `flagKey` + `userId` + settings always produce the same result. When
-the rollout moves from `20%` to `40%`, the previously included group stays
-included; new users are added, existing users are never dropped.
+The v1 single-environment API remains available. v2 adds projects,
+environments, environment API keys, OFREP, and a Node/TypeScript SDK with an
+OpenFeature provider.
 
-> This is a demo/portfolio project. Feature flags are not an authorization
-> mechanism and should not replace production auth.
+> This is a demo/portfolio project evolving into a reusable platform. Feature
+> flags are not an authorization mechanism and should not replace production
+> auth.
 
-## What it does
+## What works today
 
-- Creates and updates boolean feature flags.
-- Turns a flag fully on/off or exposes it to a percentage of users.
-- Evaluates a flag by `flagKey` + `userId` through a public API.
-- Assigns users to a stable bucket with SHA-256.
-- Persists settings and results in SQLite across restarts.
+- v1 legacy: single-environment flags, admin token, SQLite.
+- v2 projects and environments.
+- v2 environment server API keys (hashed at rest, shown once).
+- v2 management API under `/api/v1`.
+- OFREP single and bulk evaluation under `/ofrep/v1`.
+- Node/TypeScript SDK and OpenFeature provider packages.
+- Postgres primary; SQLite remains for local/test and legacy mode.
+- Legacy `/api/flags` and `/api/evaluate` continue to work.
+- SQLite → Postgres migration for existing flags.
+
+Targeting rules/segments, string/number/JSON flag types, a full admin dashboard,
+audit/RBAC, browser SDK, and streaming are planned for later versions.
 
 ## Quick start
 
-### Docker (recommended)
+### Docker: v2 with Postgres
 
 ```bash
 cp .env.example .env
-# Change ADMIN_TOKEN in .env
+# Change ADMIN_TOKEN (and optionally POSTGRES_PASSWORD) in .env
 docker compose up --build
 ```
 
-Demo: http://localhost:3000
+The stack starts Postgres, runs migrations, and serves:
 
-### Local Node
+- Demo/legacy UI: http://localhost:3000
+- Health: http://localhost:3000/healthz
+- Management API: http://localhost:3000/api/v1
+- OFREP: http://localhost:3000/ofrep/v1
 
-Requires Node.js 22+.
+`docker compose down` keeps the Postgres volume. `docker compose down -v`
+removes it.
+
+### Local: v2 with SQLite
 
 ```bash
 cp .env.example .env
+# set SWITCHBOARD_V2=true in .env
 npm ci
 npm start
 ```
 
-Tests:
+Then create a project/environment/flag/API key through the management API or
+run the demo setup:
 
 ```bash
-npm test
+ADMIN_TOKEN=dev-token-change-me npm run demo:v2
 ```
 
-Docker smoke test (clean volume, build, health, restart, down/up):
+### Local: v1 legacy mode
 
-```bash
-npm run smoke
-```
+Leave `SWITCHBOARD_V2=false` and run `npm start`; this uses the original SQLite
+`data/switchboard.db` and the legacy API only.
 
-## Demo
+## v2 integration
 
-### Single-page UI
-
-At `http://localhost:3000`:
-
-1. Enter the admin token and save it.
-2. Create a flag (e.g. `new-checkout`, `20%`, enabled).
-3. Evaluate the same user several times; the result and bucket stay the same.
-4. Run the **20 → 40 comparison** panel. It evaluates 12 fixed users at `20%`
-   and then at `40%`, and marks preserved and newly opened users separately.
-5. Refresh the page and evaluate the same user again; the result is unchanged.
-
-The comparison panel intentionally leaves the flag at `40%` at the end.
-
-### Reproducible demo script
-
-```bash
-ADMIN_TOKEN=dev-token-change-me npm run demo
-```
-
-Key output:
-
-```text
-At 20%: 4/12 open
-At 40%: 8/12 open
-4 preserved, 4 newly opened
-```
-
-Small samples do not need to match the exact percentage. What matters is that
-the same user keeps the same bucket and that the previous included set is
-preserved.
-
-### Example client
-
-```bash
-node examples/client.mjs \
-  --url http://127.0.0.1:3000 \
-  --flag new-checkout \
-  --users user-0000,user-0005,user-123
-```
-
-Output:
-
-```text
-USER       ENABLED  REASON           BUCKET  ROLLOUT
----------  -------  ---------------  ------  -------
-user-0000  true     BUCKET_INCLUDED  3       40%
-user-0005  true     BUCKET_INCLUDED  30      40%
-user-123   false    BUCKET_EXCLUDED  65      40%
-```
-
-### Video
-
-Short silent demo: [`demo/switchboard-demo.mp4`](demo/switchboard-demo.mp4)
-
-The video shows flag creation, repeated evaluation of the same user, the
-`20% → 40%` comparison, the same result after a server restart, and the test
-summary.
-
-To regenerate the video with the system Chrome browser:
-
-```bash
-npx playwright install ffmpeg   # Playwright video codec (one-time)
-# MP4 conversion also needs system ffmpeg: brew install ffmpeg
-npm run record:demo
-```
-
-## API
-
-Admin endpoints require `Authorization: Bearer <ADMIN_TOKEN>`. Evaluation and
-health endpoints are public.
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/flags` | Bearer | Create a flag |
-| `GET` | `/api/flags` | Bearer | List flags |
-| `GET` | `/api/flags/:key` | Bearer | Get one flag |
-| `PATCH` | `/api/flags/:key` | Bearer | Update `enabled`, `rolloutPercentage`, `description` |
-| `POST` | `/api/evaluate` | Public | Evaluate `flagKey` + `userId` |
-| `GET` | `/healthz` | Public | Health check |
-
-### Create a flag
-
-```bash
-curl -sS -X POST http://localhost:3000/api/flags \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{
-    "key": "new-checkout",
-    "description": "New checkout flow",
-    "enabled": true,
-    "rolloutPercentage": 20
-  }'
-```
-
-```json
-{
-  "id": 1,
-  "key": "new-checkout",
-  "description": "New checkout flow",
-  "enabled": true,
-  "rolloutPercentage": 20,
-  "createdAt": "2026-10-20T14:17:56.611Z",
-  "updatedAt": "2026-10-20T14:17:56.611Z"
-}
-```
-
-### Update a flag
-
-```bash
-curl -sS -X PATCH http://localhost:3000/api/flags/new-checkout \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"enabled": true, "rolloutPercentage": 40}'
-```
-
-A flag key is immutable after creation; there is no rename endpoint.
-
-### Evaluate
-
-```bash
-curl -sS -X POST http://localhost:3000/api/evaluate \
-  -H 'content-type: application/json' \
-  -d '{"flagKey": "new-checkout", "userId": "user-0000"}'
-```
-
-```json
-{
-  "flagKey": "new-checkout",
-  "userId": "user-0000",
-  "enabled": true,
-  "reason": "BUCKET_INCLUDED",
-  "bucket": 3,
-  "rolloutPercentage": 40
-}
-```
-
-Unknown flag:
-
-```json
-{
-  "flagKey": "missing-flag",
-  "userId": "user-0000",
-  "enabled": false,
-  "reason": "FLAG_NOT_FOUND",
-  "bucket": null,
-  "rolloutPercentage": null
-}
-```
-
-Reason values:
-
-| Reason | Meaning |
-|---|---|
-| `FLAG_DISABLED` | Flag is off; rollout is ignored |
-| `FLAG_NOT_FOUND` | Flag does not exist; `enabled:false` |
-| `BUCKET_INCLUDED` | Bucket is below the rollout threshold |
-| `BUCKET_EXCLUDED` | Bucket is at or above the rollout threshold |
-
-### Errors
-
-```json
-{ "error": { "code": "VALIDATION_ERROR", "message": "..." } }
-```
-
-Codes: `UNAUTHORIZED`, `VALIDATION_ERROR`, `FLAG_EXISTS`,
-`FLAG_NOT_FOUND`, `EVALUATION_UNAVAILABLE`, `NOT_FOUND`, `INTERNAL_ERROR`.
-
-- Invalid body/field: `400`
-- Missing/wrong admin token: `401`
-- Unknown admin flag: `404`
-- Duplicate flag: `409`
-- DB/SQLite failure: `503 EVALUATION_UNAVAILABLE`
-
-## Integration
-
-Calling the evaluation API from another application:
+### Node/TypeScript SDK
 
 ```js
-const BASE_URL = process.env.SWITCHBOARD_URL ?? 'http://localhost:3000';
+import { SwitchboardClient } from '@switchboard/sdk';
 
-export async function isEnabled(flagKey, userId) {
-  const response = await fetch(`${BASE_URL}/api/evaluate`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ flagKey, userId }),
-    signal: AbortSignal.timeout(1000),
-  });
+const client = new SwitchboardClient({
+  baseUrl: 'http://localhost:3000',
+  apiKey: process.env.SWITCHBOARD_API_KEY,
+  timeoutMs: 1000,
+});
 
-  if (response.status === 503) {
-    // Evaluation storage is unavailable. Choose your own fallback policy.
-    return { enabled: false, fallback: true };
-  }
+const enabled = await client.getBooleanValue(
+  'new-checkout',
+  false,
+  { targetingKey: userId },
+);
+```
 
-  if (!response.ok) {
-    throw new Error(`Switchboard HTTP ${response.status}`);
-  }
+### OpenFeature provider
 
-  const result = await response.json();
+```js
+import { OpenFeature } from '@openfeature/server-sdk';
+import { SwitchboardProvider } from '@switchboard/openfeature-provider';
 
-  // Unknown flags also return 200 + enabled:false.
-  return { enabled: result.enabled, fallback: false, result };
+await OpenFeature.setProviderAndWait(
+  new SwitchboardProvider({
+    baseUrl: 'http://localhost:3000',
+    apiKey: process.env.SWITCHBOARD_API_KEY,
+  }),
+);
+
+const client = OpenFeature.getClient();
+const enabled = await client.getBooleanValue(
+  'new-checkout',
+  false,
+  { targetingKey: userId },
+);
+```
+
+### Two-service demo
+
+With a v2 server running locally:
+
+```bash
+ADMIN_TOKEN=dev-token-change-me npm run demo:v2
+```
+
+This creates `demo` / `production` / `new-checkout`, creates an environment API
+key, and runs:
+
+- `examples/service-a` using the SDK.
+- `examples/service-b` using the OpenFeature provider.
+
+Both should return the same result for the same user.
+
+## v2 API
+
+Management endpoints require `Authorization: Bearer <ADMIN_TOKEN>`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST/GET` | `/api/v1/projects` | Create/list projects |
+| `POST/GET` | `/api/v1/projects/:project/environments` | Create/list environments |
+| `POST/GET` | `/api/v1/projects/:project/environments/:env/flags` | Create/list flags |
+| `GET/PATCH` | `/api/v1/projects/:project/environments/:env/flags/:key` | Get/update a flag |
+| `POST/GET` | `/api/v1/projects/:project/environments/:env/api-keys` | Create/list API keys |
+| `DELETE` | `/api/v1/projects/:project/environments/:env/api-keys/:id` | Revoke an API key |
+
+### Create project, environment, flag, and key
+
+```bash
+export ADMIN_TOKEN=dev-token-change-me
+export BASE=http://localhost:3000
+
+curl -sS -X POST "$BASE/api/v1/projects" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"key":"checkout","name":"Checkout"}'
+
+curl -sS -X POST "$BASE/api/v1/projects/checkout/environments" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"key":"production","name":"Production"}'
+
+curl -sS -X POST "$BASE/api/v1/projects/checkout/environments/production/flags" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"key":"new-checkout","enabled":true,"rolloutPercentage":20.5}'
+
+curl -sS -X POST "$BASE/api/v1/projects/checkout/environments/production/api-keys" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name":"checkout service"}'
+```
+
+The API key response contains `key` once; store it as a secret. Only the prefix
+and a SHA-256 hash are stored in the database.
+
+### OFREP evaluation
+
+```bash
+curl -sS -X POST "$BASE/ofrep/v1/evaluate/flags/new-checkout" \
+  -H "X-API-Key: $SWITCHBOARD_API_KEY" \
+  -H 'content-type: application/json' \
+  -d '{"context":{"targetingKey":"user-123","plan":"premium"}}'
+```
+
+Response:
+
+```json
+{
+  "key": "new-checkout",
+  "value": true,
+  "reason": "SPLIT",
+  "variant": "enabled"
 }
 ```
 
-Integration rules:
+Bulk:
 
-- `userId` must be opaque and **stable**. It is not normalized and is
-  case-sensitive. Always send the same ID for the same user.
-- A `flagKey` must not change after creation. Changing the key changes every
-  user's bucket.
-- Unknown flag returns `200 + enabled:false`; it does not stop the caller.
-- `503` is a service failure. Do not silently return `true`; choose an explicit
-  fallback policy.
-- A 500 ms–1 s timeout is recommended for evaluation calls.
-- Feature flags must not be used for authorization.
+```bash
+curl -sS -X POST "$BASE/ofrep/v1/evaluate/flags" \
+  -H "X-API-Key: $SWITCHBOARD_API_KEY" \
+  -H 'content-type: application/json' \
+  -d '{"context":{"targetingKey":"user-123"}}'
+```
+
+OFREP 404 responses use `FLAG_NOT_FOUND`; invalid/revoked keys return `401`.
+The vendored contract is in [`docs/contracts/ofrep-openapi.yaml`](docs/contracts/ofrep-openapi.yaml).
+
+## Legacy v1 API
+
+The original API is unchanged:
+
+- `POST/GET/PATCH /api/flags`
+- `POST /api/evaluate`
+
+In v2 mode, legacy routes map to the seeded `default` / `production`
+project/environment and keep the v1 bucket algorithm. In v1 mode, they use the
+original SQLite repository.
 
 ## Deterministic algorithm
 
+### v2 projects
+
 ```text
-u32    = SHA-256(flagKey + ":" + userId) first 4 bytes, big-endian
-bucket = floor((u32 / 2^32) * 100)        // 0–99
-open   = enabled && bucket < rolloutPercentage
+u32    = SHA-256(projectKey + ":" + flagKey + ":" + targetingKey) first 4 bytes
+bucket = floor((u32 / 2^32) * 100000)          // 0-99999
+open   = enabled && bucket < rolloutBasisPoints
 ```
 
-- The hash input is UTF-8.
-- `bucket` is in the `0–99` range.
-- Changing the rollout does not re-hash users; only the threshold changes.
-- On `20% → 40%`, everyone with `bucket < 20` also satisfies `bucket < 40`.
-  The previous included set is therefore preserved.
-- Small samples do not need to match `20%`/`40%` exactly; that is expected.
-- The algorithm version is fixed in code as `BUCKET_ALGORITHM_VERSION = 1`.
-  Changing it redistributes users.
-- Why SHA-256? It is deterministic across platforms with Node's built-in
-  `crypto` module, needs no extra dependency, and is sufficiently uniform.
-- Why not random assignment? Random assignment can change results on every
-  request or deploy; a hash-based bucket is stable.
+- `rolloutBasisPoints` is `0..100000`; API percentages support up to three
+  decimal places (e.g. `20.125`).
+- The environment is not part of the hash: the same user keeps the same bucket
+  across staging and production for the same project/flag.
+- Increasing the rollout only raises the threshold; the previous included set
+  is preserved.
 
-## Persistence
+### Legacy v1
 
-The SQLite file is selected by `DB_PATH`; in Docker it lives in the
-`switchboard-data:/app/data` named volume.
+The legacy project keeps `SHA-256(flagKey + ":" + userId)` and 100 buckets, so
+existing users do not move after the upgrade.
 
-- `docker compose down`: removes the container, keeps the volume.
-- `docker compose up`: flags and results remain.
-- `docker compose down -v`: also removes the volume; clean start.
+## Migration from v1 SQLite
 
-SQLite runs in `WAL` mode. The service targets a single instance; horizontal
-scaling is out of scope.
+The old database is never deleted automatically. Run:
+
+```bash
+DATABASE_URL=postgres://switchboard:switchboard@localhost:5432/switchboard \
+SQLITE_PATH=./data/switchboard.db \
+npm run migrate:legacy
+```
+
+The script copies flags into the default project/environment, preserves
+settings and timestamps, and is idempotent. See
+[`docs/MIGRATION.md`](docs/MIGRATION.md) for the full procedure.
 
 ## Tests
 
 ```bash
-npm test
-npm run smoke
+npm test              # v1 + v2 SQLite tests
+npm run test:db       # Postgres integration (requires DATABASE_URL)
+npm run test:contract # OFREP OpenAPI contract tests
+npm run test:workspaces # SDK/provider build + tests
+npm run smoke         # Docker Compose + Postgres smoke test
 ```
 
-`npm test` runs 58 tests:
-
-- Determinism and golden vectors.
-- Bucket bounds (`0–99`), rollout `0`/`100`.
-- The `20%` set is a subset of the `40%` set for 1,000 fixed IDs.
-- `20%`/`40%` distribution stays within ±2 points for 10,000 fixed IDs.
-- API contract, unknown flags, validation, auth, and `503`.
-- Flag settings and evaluation results remain identical after close/reopen.
-- Static demo files and the JSON 404 envelope.
-
-`npm run smoke` builds the Docker image and verifies health, flag creation,
-restart, persistence after `down`/`up`, and `down -v` cleanup.
+Current local suite: 90 tests, with the Postgres integration test skipped when
+`DATABASE_URL` is not set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)
 
-## Decisions
-
-Key decisions are recorded as ADR-lite entries in
-[`docs/DECISIONS.md`](docs/DECISIONS.md):
-
-- SHA-256 deterministic buckets and monotonicity.
-- `200 + FLAG_NOT_FOUND` for unknown flags.
-- `503` on DB failure; no silent fail-open.
-- Single `ADMIN_TOKEN` + Bearer; demo-grade admin security.
-- SQLite + `better-sqlite3`; single instance.
-- Immutable `flagKey`; no rename.
-- No cache during evaluation.
-- Trunk-based git with a push after every green task.
-- Central docs + short task briefs.
-- Silent video with on-screen captions.
-
-## Documentation
-
-- [Implementation plan](docs/PLAN.md)
-- [Decision record](docs/DECISIONS.md)
-- [Test/demo evidence](docs/EVIDENCE.md)
-- [Independent review and closure](docs/REVIEW.md)
-
-## Project structure
+## Architecture
 
 ```text
 src/
-  app.js                 # buildApp(): testable Fastify application
-  server.js              # env, listen, graceful shutdown
-  db.js                  # SQLite connection and schema
-  auth.js                # Bearer token verification
-  errors.js              # error envelope and mappings
-  flags/
-    repository.js        # flag CRUD
-    evaluator.js         # SHA-256 bucket + decision
-    routes.js            # admin routes
-    evaluate-routes.js   # public evaluate route
-    schemas.js           # JSON schemas
-public/                  # single-page demo
-examples/client.mjs      # example client
-scripts/demo.mjs         # 20 → 40 demo script
-scripts/smoke-docker.sh  # Docker smoke test
-test/                    # node:test tests
-docs/                    # plan, decisions, evidence, task briefs
+  app.js                 # Fastify app factory
+  server.js              # env, v1/v2 selection, graceful shutdown
+  db.js                  # v1 SQLite
+  flags/                 # v1 legacy routes/repository/evaluator
+  v2/
+    db.js                # Kysely Postgres/SQLite + migrations
+    evaluator.js         # v2 100k bucket evaluator
+    repositories/        # projects, flags, API keys
+    routes/              # management + OFREP
+    legacy-repository.js # v1 API over the v2 schema
+db/migrations/           # Kysely migrations
+packages/
+  sdk-node/              # Node/TypeScript SDK
+  openfeature-provider/  # OpenFeature provider
+examples/
+  service-a/             # SDK example
+  service-b/             # OpenFeature example
 ```
+
+## Documentation
+
+- [v1 implementation plan](docs/PLAN.md)
+- [v2 expansion plan](docs/EXPANSION_PLAN.md)
+- [Decision record](docs/DECISIONS.md)
+- [Test/demo evidence](docs/EVIDENCE.md)
+- [Independent review and closure](docs/REVIEW.md)
+- [Migration guide](docs/MIGRATION.md)
 
 ## Limitations
 
-- `ADMIN_TOKEN` is demo-grade; there are no user accounts, RBAC, audit log, or
-  token rotation.
-- Single instance and SQLite; high concurrency/horizontal scaling is not a
-  target.
-- No rate limiting, cache, or multiple environments.
-- No custom rule language, segments, or A/B analysis.
-- No flag deletion/rename.
-- Small samples may not match the exact percentage; that is statistical
-  reality.
+- `ADMIN_TOKEN` is still the bootstrap admin credential; project-scoped admin
+  keys and RBAC/SSO are later work.
+- v2.0 supports boolean flags only; targeting rules, segments, and
+  string/number/JSON flags are later work.
+- Server API keys only; browser/client keys and a browser SDK are later work.
+- Single Postgres instance target; no streaming/cache/rate limiting yet.
+- The v1 browser demo and video are still in Turkish; the v2 API and
+  documentation are in English.
 - Feature flags must not replace authorization.
-- The browser demo and demo video are in Turkish; the API and documentation are
-  in English.
 
 ## License
 
