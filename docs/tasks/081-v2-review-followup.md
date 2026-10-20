@@ -6,10 +6,11 @@ This thread starts with a clean context. Read this file, `docs/EXPANSION_PLAN.md
 ## Current state
 
 - Repo: `/Users/kemalselcuk/.t3/projects/switchboard`
-- v2.0.0 in progress; package version `2.0.0`.
-- B1 (cross-environment mutation on failed PATCH) is fixed in commit `7adfa2b`.
-- `npm test`: 92 tests, 91 pass, 1 skipped (Postgres without `DATABASE_URL`).
-- Independent v2 review verdict: **NOT READY**; the findings below remain.
+- v2.0.0 work is complete; findings are closed in `docs/REVIEW-v2.md`.
+- B1 (cross-environment mutation on failed PATCH) was fixed in `7adfa2b`.
+- `npm test`: 106 tests, 103 pass, 3 skipped (Postgres without `DATABASE_URL`).
+- Independent v2 review verdict at handoff: NOT READY; all required findings
+  below are now closed, and the remaining optional items are documented.
 
 ## User decisions
 
