@@ -250,14 +250,59 @@ kullanılır.
 
 ## 3. Determinizm ve monotonluk
 
-```bash
-# TODO: aynı kullanıcı, %20 ve %40 karşılaştırması
+`demo-checkout` flag'i önce `%20`, sonra `%40` yapıldı. Aynı kullanıcıların
+bucket'ları değişmedi; `%20`'de açık olan kullanıcı `%40`'ta da açık kaldı,
+`%20`'de kapalı olan bir kullanıcı `%40`'ta açıldı:
+
+```text
+--- at20 user01
+{"flagKey":"demo-checkout","userId":"demo-user-01","enabled":true,"reason":"BUCKET_INCLUDED","bucket":4,"rolloutPercentage":20}
+--- at20 user14
+{"flagKey":"demo-checkout","userId":"demo-user-14","enabled":false,"reason":"BUCKET_EXCLUDED","bucket":37,"rolloutPercentage":20}
+--- at40 user01
+{"flagKey":"demo-checkout","userId":"demo-user-01","enabled":true,"reason":"BUCKET_INCLUDED","bucket":4,"rolloutPercentage":40}
+--- at40 user14
+{"flagKey":"demo-checkout","userId":"demo-user-14","enabled":true,"reason":"BUCKET_INCLUDED","bucket":37,"rolloutPercentage":40}
 ```
+
+`bucket` değerleri `4` ve `37` olarak sabit kaldı. `%20 → %40` geçişi
+yeniden hash yapmadı; yalnızca eşik değişti.
 
 ## 4. API sözleşmesi
 
-```bash
-# TODO: curl örnekleri ve gerçek yanıtlar
+Gerçek `curl` yanıtları (`demo-checkout`, `%40`):
+
+```text
+$ curl -sS http://127.0.0.1:3100/healthz
+{"status":"ok"}
+
+$ curl -sS -X POST -H 'content-type: application/json' \
+    -d '{"flagKey":"demo-checkout","userId":"demo-user-01"}' \
+    http://127.0.0.1:3100/api/evaluate
+{"flagKey":"demo-checkout","userId":"demo-user-01","enabled":true,"reason":"BUCKET_INCLUDED","bucket":4,"rolloutPercentage":40}
+
+$ curl -sS -X POST -H 'content-type: application/json' \
+    -d '{"flagKey":"missing-flag","userId":"demo-user-01"}' \
+    http://127.0.0.1:3100/api/evaluate
+{"flagKey":"missing-flag","userId":"demo-user-01","enabled":false,"reason":"FLAG_NOT_FOUND","bucket":null,"rolloutPercentage":null}
+
+$ curl -sS -X POST -H 'content-type: application/json' \
+    -d '{"flagKey":"DEMO","userId":""}' \
+    http://127.0.0.1:3100/api/evaluate
+{"error":{"code":"VALIDATION_ERROR","message":"body/flagKey must match pattern \"^[a-z0-9][a-z0-9._-]{0,63}$\""}}
+status=400
+
+$ curl -sS http://127.0.0.1:3100/api/flags
+{"error":{"code":"UNAUTHORIZED","message":"Missing or invalid bearer token"}}
+status=401
+```
+
+Yönetim çağrısı örneği:
+
+```text
+$ curl -sS -H 'Authorization: Bearer dev-token-change-me' \
+    http://127.0.0.1:3100/api/flags/demo-checkout
+{"id":1,"key":"demo-checkout","description":"Demo: 20 → 40 rollout karşılaştırması","enabled":true,"rolloutPercentage":40,"createdAt":"2026-10-20T14:17:56.611Z","updatedAt":"2026-10-20T14:24:29.353Z"}
 ```
 
 ## 5. Yeniden başlatma / kalıcılık
@@ -434,9 +479,20 @@ $ curl -s -H 'Authorization: Bearer smoke-token' http://127.0.0.1:3101/api/flags
 
 ## 7. Demo video
 
-- Dosya/link: TODO
-- Süre: TODO
-- Gösterilen akış: TODO
+- Dosya: [`demo/switchboard-demo.mp4`](../demo/switchboard-demo.mp4)
+- Süre: 46 saniye
+- Format: 1280×720, H.264, sessiz
+- Kayıt komutu: `npm run record:demo`
+- Gösterilen akış:
+  1. Servis sağlığı ve admin token ile bağlantı.
+  2. `demo-checkout` flag'inin `%20` rollout ile oluşturulması.
+  3. `demo-user-01` için aynı bucket/sonuç.
+  4. `demo-user-14` için `%20`'de kapalı sonuç.
+  5. `%20 → %40` karşılaştırması: 4/12 açık → 8/12 açık, 4 korundu,
+     4 yeni açıldı.
+  6. Sunucu süreci yeniden başlatıldıktan sonra aynı kullanıcı için
+     `bucket 4 → 4`, durum `Açık → Açık`.
+  7. `npm test`: 57/57 pass.
 
 ## 8. Git kanıtı
 

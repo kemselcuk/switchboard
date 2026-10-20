@@ -137,3 +137,32 @@ metinler; README'de komut çıktıları ve timestamp'li kanıt.
 - Video üretimi ve izlenmesi kolay.
 - Teknik ayrıntı README ve `EVIDENCE.md`'de kalır.
 - Seslendirme ayrıca istenirse ayrı bir sürüm olarak eklenebilir.
+
+## ADR-011 — Docker'da better-sqlite3 için deps aşamasında build fallback
+
+**Bağlam:** `better-sqlite3` native bir modüldür. Bu ortamda Docker build
+sırasında prebuilt binary indirilemedi.
+
+**Karar:** Dockerfile önce `npm ci --omit=dev` dener; başarısız olursa yalnızca
+deps aşamasında `python3 make g++` kurup derler ve aynı aşamada temizler.
+Runtime image non-root `node` kullanıcısıyla çalışır.
+
+**Sonuçlar:**
+- İlk build daha uzun sürebilir; runtime image'da build aracı kalmaz.
+- Smoke testi build, health, restart ve volume kalıcılığını doğrular.
+- Prebuilt binary ileride çalışırsa fallback devreye girmez.
+
+## ADR-012 — Demo kaydı için dev-only Playwright-core
+
+**Bağlam:** Demo videosu gerçek UI etkileşimlerini göstermeli; uygulama
+bağımlılıkları şişmemeli.
+
+**Karar:** `scripts/record-demo.mjs`, devDependency olan `playwright-core` ve
+sistem Chrome'u kullanır. Video codec'i için Playwright'ın FFmpeg bileşeni
+bir kez indirilir. Üretim Docker image'ı `npm ci --omit=dev` kullandığı için
+Playwright image'a girmez.
+
+**Sonuçlar:**
+- Video gerçek tarayıcı etkileşimiyle üretilir; browser panel bağımlılığı yok.
+- Kayıt için yerel Chrome ve tek seferlik FFmpeg bileşeni gerekir.
+- Video `demo/switchboard-demo.mp4` olarak kanıta eklenir.
