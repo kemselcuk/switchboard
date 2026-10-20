@@ -8,6 +8,31 @@ export const ERROR_CODES = Object.freeze({
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 });
 
+const STORAGE_NETWORK_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENOTFOUND',
+  'EPIPE',
+  'ETIMEDOUT',
+]);
+
+function isStorageError(error) {
+  if (typeof error?.code !== 'string') {
+    return false;
+  }
+
+  if (error.code.startsWith('SQLITE_')) {
+    return true;
+  }
+
+  if (STORAGE_NETWORK_CODES.has(error.code)) {
+    return true;
+  }
+
+  // Postgres SQLSTATE codes; integrity errors (23xxx) are handled by callers.
+  return /^[0-9A-Z]{5}$/.test(error.code) && !error.code.startsWith('23');
+}
+
 export class AppError extends Error {
   constructor(statusCode, code, message) {
     super(message);
@@ -50,7 +75,7 @@ export function normalizeError(error) {
     };
   }
 
-  if (typeof error?.code === 'string' && error.code.startsWith('SQLITE_')) {
+  if (isStorageError(error)) {
     return {
       statusCode: 503,
       code: ERROR_CODES.EVALUATION_UNAVAILABLE,

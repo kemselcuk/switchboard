@@ -8,6 +8,41 @@ import { initializeV2Database } from '../../src/v2/db.js';
 const DATABASE_URL = process.env.DATABASE_URL;
 const skip = DATABASE_URL ? false : 'DATABASE_URL is not set';
 
+test('maps a Postgres storage failure to 503', { skip }, async (t) => {
+  const v2 = await initializeV2Database({ databaseUrl: DATABASE_URL });
+  const app = buildApp({ v2, adminToken: 'postgres-test-token' });
+
+  t.after(() => app.close());
+
+  const original = v2.db.selectFrom.bind(v2.db);
+  v2.db.selectFrom = () => {
+    const error = new Error('terminating connection due to administrator command');
+
+    error.code = '57P01';
+    throw error;
+  };
+
+  let response;
+
+  try {
+    response = await app.inject({
+      method: 'GET',
+      url: '/api/flags',
+      headers: { authorization: 'Bearer postgres-test-token' },
+    });
+  } finally {
+    v2.db.selectFrom = original;
+  }
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.json(), {
+    error: {
+      code: 'EVALUATION_UNAVAILABLE',
+      message: 'Flag storage is unavailable',
+    },
+  });
+});
+
 test('Postgres migrations and v2 evaluation flow', { skip }, async (t) => {
   const v2 = await initializeV2Database({ databaseUrl: DATABASE_URL });
   const app = buildApp({ v2, adminToken: 'postgres-test-token' });
