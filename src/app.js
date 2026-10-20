@@ -74,6 +74,10 @@ export function buildApp({
   app.setErrorHandler((error, request, reply) => {
     const { statusCode, code, message } = normalizeError(error);
 
+    if (statusCode >= 500) {
+      request.log.error(error);
+    }
+
     return sendError(reply, statusCode, code, message);
   });
 
