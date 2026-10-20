@@ -85,43 +85,46 @@ export async function migrateToLatest(db) {
 
 export async function seedDefaultProject(db) {
   const now = new Date().toISOString();
-  let project = await db
-    .selectFrom('projects')
-    .selectAll()
-    .where('key', '=', DEFAULT_PROJECT_KEY)
-    .executeTakeFirst();
 
-  if (!project) {
-    project = {
+  await db
+    .insertInto('projects')
+    .values({
       id: randomUUID(),
       key: DEFAULT_PROJECT_KEY,
       name: 'Default project',
       created_at: now,
       updated_at: now,
-    };
+    })
+    .onConflict((conflict) => conflict.column('key').doNothing())
+    .execute();
 
-    await db.insertInto('projects').values(project).execute();
-  }
-
-  let environment = await db
-    .selectFrom('environments')
+  const project = await db
+    .selectFrom('projects')
     .selectAll()
-    .where('project_id', '=', project.id)
-    .where('key', '=', DEFAULT_ENVIRONMENT_KEY)
-    .executeTakeFirst();
+    .where('key', '=', DEFAULT_PROJECT_KEY)
+    .executeTakeFirstOrThrow();
 
-  if (!environment) {
-    environment = {
+  await db
+    .insertInto('environments')
+    .values({
       id: randomUUID(),
       project_id: project.id,
       key: DEFAULT_ENVIRONMENT_KEY,
       name: 'Production',
       created_at: now,
       updated_at: now,
-    };
+    })
+    .onConflict((conflict) => conflict
+      .columns(['project_id', 'key'])
+      .doNothing())
+    .execute();
 
-    await db.insertInto('environments').values(environment).execute();
-  }
+  const environment = await db
+    .selectFrom('environments')
+    .selectAll()
+    .where('project_id', '=', project.id)
+    .where('key', '=', DEFAULT_ENVIRONMENT_KEY)
+    .executeTakeFirstOrThrow();
 
   return {
     defaultProjectId: project.id,
