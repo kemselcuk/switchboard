@@ -75,7 +75,7 @@ export function createApiKeyAuthHook(db) {
     };
 
     try {
-      await apiKeys.touchApiKey(record.key_id);
+      await apiKeys.touchApiKey(record.key_id, record.last_used_at);
     } catch {
       // A usage timestamp must never fail an evaluation.
     }

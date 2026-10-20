@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
-import { notFound } from './common.js';
+import { isUniqueViolation, notFound } from './common.js';
 
 export function hashApiKey(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -29,30 +29,41 @@ export function createApiKeyRepository(db) {
     name,
     type = 'server',
   }) {
-    const generated = generateApiKey(type);
-    const now = new Date().toISOString();
-    const row = {
-      id: randomUUID(),
-      environment_id: environmentId,
-      type,
-      name,
-      prefix: generated.prefix,
-      hash: generated.hash,
-      created_at: now,
-      last_used_at: null,
-      revoked_at: null,
-    };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const generated = generateApiKey(type);
+      const now = new Date().toISOString();
+      const row = {
+        id: randomUUID(),
+        environment_id: environmentId,
+        type,
+        name,
+        prefix: generated.prefix,
+        hash: generated.hash,
+        created_at: now,
+        last_used_at: null,
+        revoked_at: null,
+      };
 
-    await db.insertInto('api_keys').values(row).execute();
+      try {
+        await db.insertInto('api_keys').values(row).execute();
 
-    return {
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      prefix: row.prefix,
-      key: generated.key,
-      createdAt: row.created_at,
-    };
+        return {
+          id: row.id,
+          name: row.name,
+          type: row.type,
+          prefix: row.prefix,
+          key: generated.key,
+          createdAt: row.created_at,
+        };
+      } catch (error) {
+        if (isUniqueViolation(error) && attempt < 4) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new Error('Could not generate a unique API key prefix');
   }
 
   async function listApiKeys(environmentId) {
@@ -107,6 +118,7 @@ export function createApiKeyRepository(db) {
         'api_keys.hash',
         'api_keys.type',
         'api_keys.revoked_at',
+        'api_keys.last_used_at',
         'environments.id as environment_id',
         'environments.key as environment_key',
         'environments.name as environment_name',
@@ -120,7 +132,15 @@ export function createApiKeyRepository(db) {
     return row ?? null;
   }
 
-  async function touchApiKey(id) {
+  async function touchApiKey(id, lastUsedAt) {
+    if (lastUsedAt) {
+      const age = Date.now() - new Date(lastUsedAt).getTime();
+
+      if (Number.isFinite(age) && age >= 0 && age < 60_000) {
+        return;
+      }
+    }
+
     await db
       .updateTable('api_keys')
       .set({ last_used_at: new Date().toISOString() })

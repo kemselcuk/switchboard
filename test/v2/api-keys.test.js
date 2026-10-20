@@ -40,6 +40,38 @@ test('creates a server key once and never lists the secret', async (t) => {
   assert.equal(stored.hash.length, 64);
 });
 
+test('records last use once and throttles repeat writes', async (t) => {
+  const { app, v2 } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  const created = await createApiKey(app, 'demo', 'production');
+
+  const evaluate = () => app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/missing',
+    headers: { 'x-api-key': created.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal((await evaluate()).statusCode, 404);
+
+  const first = await v2.db
+    .selectFrom('api_keys')
+    .select('last_used_at')
+    .where('id', '=', created.id)
+    .executeTakeFirst();
+  assert.equal(typeof first.last_used_at, 'string');
+
+  assert.equal((await evaluate()).statusCode, 404);
+
+  const second = await v2.db
+    .selectFrom('api_keys')
+    .select('last_used_at')
+    .where('id', '=', created.id)
+    .executeTakeFirst();
+  assert.equal(second.last_used_at, first.last_used_at);
+});
+
 test('revokes an API key and rejects it afterwards', async (t) => {
   const { app } = await createV2App(t);
   await createProject(app);
