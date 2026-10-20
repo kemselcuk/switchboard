@@ -62,7 +62,7 @@ size=580067
 ```
 
 - `main` ve `origin/main` aynı.
-- `v1.0.0` tag'i `382213c` commit'ine işaret eder.
+- `v1.0.0` tag'i release commit'ine işaret eder.
 - Docker image non-root `node` kullanıcısıyla çalışır.
 - `.env` repoda izlenmez; smoke gerçek token'ı kullanmaz.
 

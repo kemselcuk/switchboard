@@ -7,7 +7,7 @@ kanıtlarını içerir. Tüm bölümler gerçek çıktılarla doldurulmuştur.
 
 - Tarih: 2026-10-20
 - Makine: macOS (arm64), Node.js 22.23.2, Docker 29.8.1, SQLite 3.51.0
-- Release commit: `382213c` (`v1.0.0`)
+- Release tag: `v1.0.0` (bu commit)
 - GitHub: https://github.com/kemselcuk/switchboard
 
 ## 1. Otomatik testler
@@ -522,4 +522,4 @@ $ git status --short
 (boş)
 ```
 
-Release tag: `v1.0.0` → `382213c`.
+Release tag: `v1.0.0` (bu commit).
