@@ -320,3 +320,21 @@ and `304` repeats the `ETag` header.
   them directly.
 - ETag is a cache validator, not a security boundary; project key is included
   to prevent cross-project validator reuse.
+
+## ADR-021 — Management API OpenAPI is deferred
+
+**Context:** The OFREP contract is the external integration boundary and has a
+vendored OpenAPI document plus contract tests. The `/api/v1` management API is
+used by the demo UI and operators, and its request bodies are already validated
+by Fastify JSON schemas.
+
+**Decision:** v2.0 does not ship a separate management OpenAPI document. The
+README endpoint table, JSON schemas in `src/v2/schemas.js`, and route tests are
+the management contract. OFREP remains the only OpenAPI-driven contract.
+
+**Consequences:**
+- There is no second spec to drift from the route schemas before the API
+  surface stabilizes.
+- A management OpenAPI document can be generated or written in v2.1 when
+  project-scoped admin keys and more flag types exist.
+- This deferral is explicit, not an accidental omission.

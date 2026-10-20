@@ -59,6 +59,9 @@ up to three decimal places.
 | `POST/GET/PATCH` | `/api/v1/projects/:project/environments/:env/flags` | `ADMIN_TOKEN` |
 | `POST/GET/DELETE` | `/api/v1/projects/:project/environments/:env/api-keys` | `ADMIN_TOKEN` |
 
+The management API is defined by the route JSON schemas, tests, and this table;
+a separate management OpenAPI document is deferred to v2.1 (ADR-021).
+
 ### OFREP
 
 - `POST /ofrep/v1/evaluate/flags` — bulk evaluation.

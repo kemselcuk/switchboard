@@ -317,7 +317,8 @@ examples/
 - [v2 expansion plan](docs/EXPANSION_PLAN.md)
 - [Decision record](docs/DECISIONS.md)
 - [Test/demo evidence](docs/EVIDENCE.md)
-- [Independent review and closure](docs/REVIEW.md)
+- [v2 review and closure](docs/REVIEW-v2.md)
+- [v1 review and closure](docs/REVIEW.md)
 - [Migration guide](docs/MIGRATION.md)
 
 ## Limitations
