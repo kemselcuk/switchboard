@@ -58,7 +58,8 @@ servis edilmeli.
    - Son 10 değerlendirme tablosu: zaman, flag, userId, enabled, reason, bucket.
 
 6. **20 → 40 karşılaştırma paneli**
-   - Seçili flag için 12 sabit demo kullanıcısı (`demo-user-01` … `demo-user-12`).
+   - Seçili flag için 12 sabit demo kullanıcısı (bucket dağılımı için
+     seçilmiş ID'ler; `public/app.js` ve `scripts/demo.mjs` ile aynı liste).
    - Önce `PATCH` ile rollout 20, kullanıcıları değerlendir.
    - Sonra `PATCH` ile rollout 40, aynı kullanıcıları değerlendir.
    - Tablo: userId, bucket, 20% sonucu, 40% sonucu, "korundu" / "yeni açıldı".

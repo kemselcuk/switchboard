@@ -125,7 +125,8 @@ test özeti.
 Videoyu yeniden üretmek için sistem Chrome'u kullanan kayıt script'i:
 
 ```bash
-npx playwright install ffmpeg   # tek seferlik video codec bileşeni
+npx playwright install ffmpeg   # Playwright video codec'i (tek seferlik)
+# MP4 dönüşümü için sistem ffmpeg'i de gerekir: brew install ffmpeg
 npm run record:demo
 ```
 
@@ -319,7 +320,7 @@ npm test
 npm run smoke
 ```
 
-`npm test` 57 test çalıştırır:
+`npm test` 58 test çalıştırır:
 
 - Determinizm ve golden vector'lar.
 - Bucket sınırları (`0–99`), rollout `0`/`100`.

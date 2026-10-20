@@ -1,7 +1,7 @@
 # Demo ve Test Kanıtları
 
 Bu dosya yalnızca gerçekten çalıştırılmış komutların çıktılarını ve demo
-kanıtlarını içerir. Henüz doldurulmamış bölümler `TODO` olarak kalır.
+kanıtlarını içerir. Tüm bölümler gerçek çıktılarla doldurulmuştur.
 
 ## Ortam
 
@@ -139,8 +139,8 @@ Görev 040 sonrası `npm test`:
 ✔ unknown API routes keep the JSON NOT_FOUND envelope
 ✔ unknown static paths fall back to the JSON NOT_FOUND envelope
 
-ℹ tests 57
-ℹ pass 57
+ℹ tests 58
+ℹ pass 58
 ℹ fail 0
 ```
 
@@ -480,7 +480,7 @@ $ curl -s -H 'Authorization: Bearer smoke-token' http://127.0.0.1:3101/api/flags
 ## 7. Demo video
 
 - Dosya: [`demo/switchboard-demo.mp4`](../demo/switchboard-demo.mp4)
-- Süre: 46 saniye
+- Süre: 62,68 saniye
 - Format: 1280×720, H.264, sessiz
 - Kayıt komutu: `npm run record:demo`
 - Gösterilen akış:
@@ -492,7 +492,7 @@ $ curl -s -H 'Authorization: Bearer smoke-token' http://127.0.0.1:3101/api/flags
      4 yeni açıldı.
   6. Sunucu süreci yeniden başlatıldıktan sonra aynı kullanıcı için
      `bucket 4 → 4`, durum `Açık → Açık`.
-  7. `npm test`: 57/57 pass.
+  7. `npm test`: 58/58 pass.
 
 ## 8. Git kanıtı
 

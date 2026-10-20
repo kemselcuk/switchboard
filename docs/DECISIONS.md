@@ -159,8 +159,8 @@ bağımlılıkları şişmemeli.
 
 **Karar:** `scripts/record-demo.mjs`, devDependency olan `playwright-core` ve
 sistem Chrome'u kullanır. Video codec'i için Playwright'ın FFmpeg bileşeni
-bir kez indirilir. Üretim Docker image'ı `npm ci --omit=dev` kullandığı için
-Playwright image'a girmez.
+bir kez indirilir; MP4 dönüşümü sistem `ffmpeg` ile yapılır. Üretim Docker
+image'ı `npm ci --omit=dev` kullandığı için Playwright image'a girmez.
 
 **Sonuçlar:**
 - Video gerçek tarayıcı etkileşimiyle üretilir; browser panel bağımlılığı yok.

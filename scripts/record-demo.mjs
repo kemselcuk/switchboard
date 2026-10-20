@@ -220,7 +220,7 @@ async function main() {
   page = await context.newPage();
 
   await page.setContent(titleCard());
-  await delay(3200);
+  await delay(5000);
 
   await page.goto(BASE_URL, { waitUntil: 'networkidle' });
   await page.waitForFunction(
@@ -228,12 +228,12 @@ async function main() {
     { timeout: 10000 },
   );
   await setCaption('1/6 — Servis sağlıklı. Admin token ile bağlanıyoruz.');
-  await delay(3000);
+  await delay(4000);
 
   await page.fill('#admin-token', ADMIN_TOKEN);
   await page.click('#token-form button[type="submit"]');
   await page.waitForSelector('#flag-list .empty', { timeout: 10000 });
-  await delay(800);
+  await delay(1200);
 
   await setCaption('2/6 — Yeni flag: demo-checkout, %20 rollout, açık.');
   await page.fill('#flag-key', FLAG_KEY);
@@ -251,7 +251,7 @@ async function main() {
     FLAG_KEY,
     { timeout: 10000 },
   );
-  await delay(2500);
+  await delay(3500);
 
   await setCaption(`3/6 — ${USER_KEPT}: aynı kullanıcı, aynı bucket.`);
   await page.fill('#evaluate-user', USER_KEPT);
@@ -261,7 +261,7 @@ async function main() {
   });
   const keptBucket = (await page.textContent('#result-bucket')).trim();
   const keptEnabled = (await page.textContent('#result-enabled')).trim();
-  await delay(3000);
+  await delay(4000);
 
   await setCaption(`4/6 — ${USER_NEW}: %20'de kapalı.`);
   await page.fill('#evaluate-user', USER_NEW);
@@ -271,7 +271,7 @@ async function main() {
     USER_NEW,
     { timeout: 10000 },
   );
-  await delay(3000);
+  await delay(4000);
 
   await setCaption('5/6 — %20 → %40: önceki açık grup korunuyor.');
   await page.click('#compare-run');
@@ -283,7 +283,7 @@ async function main() {
     { timeout: 10000 },
   );
   const summary = (await page.textContent('#compare-summary')).trim();
-  await delay(5000);
+  await delay(6500);
 
   await setCaption('6/6 — Sunucu yeniden başlatılıyor. Aynı ayar, aynı kullanıcı.');
   await stopServer();
@@ -309,7 +309,7 @@ async function main() {
     `Restart sonrası: bucket ${afterRestartBucket}, durum ${afterRestartEnabled}. `
       + `Önce: bucket ${keptBucket}, durum ${keptEnabled}.`,
   );
-  await delay(5000);
+  await delay(6500);
 
   const tests = await run('npm', ['test']);
   const testTail = tests.stdout
@@ -317,11 +317,15 @@ async function main() {
     .split('\n')
     .slice(-12)
     .join('\n');
+  const testMatch = tests.stdout.match(/ℹ tests (\d+)[\s\S]*?ℹ pass (\d+)/);
+  const testLabel = testMatch
+    ? `${testMatch[2]}/${testMatch[1]} test geçti.`
+    : 'Testler geçti.';
 
   await page.setContent(card(
     'Testler',
     [
-      '<span style="color:#86efac">57/57 test geçti.</span>',
+      `<span style="color:#86efac">${escapeHtml(testLabel)}</span>`,
       `Demo özeti: ${escapeHtml(summary)}`,
     ],
     'npm test · node:test · Fastify inject',
@@ -343,7 +347,7 @@ async function main() {
     });
     document.querySelector('main').append(pre);
   }, testTail);
-  await delay(7000);
+  await delay(9000);
 
   await page.setContent(card(
     'Switchboard',
@@ -354,7 +358,7 @@ async function main() {
     ],
     'github.com/kemselcuk/switchboard · docs/EVIDENCE.md',
   ));
-  await delay(5500);
+  await delay(8000);
 
   const video = page.video();
 
