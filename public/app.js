@@ -722,6 +722,11 @@ function bindEvents() {
       form.reset();
       byId('flag-rollout').value = '0';
       await loadFlags({ silent: true });
+      setStatus(
+        byId('flags-status'),
+        `Flag listesi güncel: ${flag.key}`,
+        'ok',
+      );
     } catch (error) {
       setStatus(status, error.message, 'error');
     } finally {
