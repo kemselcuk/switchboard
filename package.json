@@ -12,11 +12,15 @@
     "dev": "node --watch --env-file=.env src/server.js",
     "test": "node --test --test-reporter=spec",
     "demo": "node scripts/demo.mjs",
-    "smoke": "bash scripts/smoke-docker.sh"
+    "smoke": "bash scripts/smoke-docker.sh",
+    "record:demo": "node scripts/record-demo.mjs"
   },
   "dependencies": {
     "@fastify/static": "^10.1.6",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.7"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
   }
 }
