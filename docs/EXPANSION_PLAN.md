@@ -221,3 +221,20 @@ compatibility, migration, monorepo tooling, scope creep.
 **Out of scope for v2.0:** targeting rules/segments, string/number/JSON flag
 types, full admin dashboard, audit log, RBAC/SSO, browser SDK, A/B experiments,
 SaaS billing, Kubernetes/Helm, streaming/SSE. These are v2.1+.
+
+## 11. v2.1 performance/ops track (approved)
+
+Small, purpose-safe performance and operations work that does not change the
+evaluation contract or the v2.0 scope boundaries. Task brief:
+`docs/tasks/082-perf-baseline-and-quickwins.md`.
+
+| ID | Item | Acceptance |
+|---|---|---|
+| 11.1 | Load-test script + baseline | `npm run bench` prints real single/bulk numbers for SQLite (and Postgres with `DATABASE_URL`); baseline recorded in EVIDENCE before optimization |
+| 11.2 | `/readyz` storage probe | 200 with storage up; 503 `EVALUATION_UNAVAILABLE` on storage failure; `/healthz` stays cheap |
+| 11.3 | `DATABASE_POOL_MAX` | Integer ≥1 configures the Postgres pool; invalid values fall back to the `pg` default |
+| 11.4 | API-key prefix cache | Short-TTL in-memory cache, local invalidation on create/revoke; flag evaluation reads stay uncached (ADR-007 untouched) |
+
+Deferred until the benchmark proves a bottleneck: flag-config caching (needs an
+ADR-007 revision), SDK bulk/ETag usage, rate limiting, metrics, and the v2.1
+feature set above.
