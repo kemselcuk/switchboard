@@ -12,8 +12,32 @@ kanıtlarını içerir. Henüz doldurulmamış bölümler `TODO` olarak kalır.
 
 ## 1. Otomatik testler
 
-```bash
-# TODO: npm test çıktısı
+İlk depolama çekirdeği testleri (commit `586dfad`):
+
+```text
+✔ buildApp accepts an injected repository without opening a database
+✔ app.close() closes the owned database
+✔ createFlag stores a flag and returns it in camelCase
+✔ createFlag applies defaults for optional fields
+✔ getFlag returns null for an unknown key
+✔ listFlags returns flags in creation order
+✔ updateFlag only changes the provided fields
+✔ updateFlag with an empty patch returns the current flag
+✔ createFlag rejects a duplicate key
+✔ updateFlag rejects an unknown key
+✔ schema enforces the rollout percentage bounds
+✔ file database keeps flags after close and reopen
+
+ℹ tests 13
+ℹ pass 13
+ℹ fail 0
+```
+
+`ADMIN_TOKEN` olmadan sunucu başlatma kontrolü:
+
+```text
+exit=1
+ADMIN_TOKEN is required. Copy .env.example to .env and set a token.
 ```
 
 ## 2. Determinizm ve monotonluk
