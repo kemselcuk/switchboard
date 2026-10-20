@@ -11,7 +11,7 @@ export async function evaluateRoutes(app) {
       let flag;
 
       try {
-        flag = app.repository.getFlag(flagKey);
+        flag = await app.repository.getFlag(flagKey);
       } catch (error) {
         const unavailable = new AppError(
           503,

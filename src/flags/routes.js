@@ -20,7 +20,7 @@ export async function flagRoutes(app, { adminToken } = {}) {
         rolloutPercentage = 0,
       } = request.body;
 
-      const flag = app.repository.createFlag({
+      const flag = await app.repository.createFlag({
         key,
         description,
         enabled,
@@ -32,14 +32,14 @@ export async function flagRoutes(app, { adminToken } = {}) {
   );
 
   app.get('/api/flags', async () => ({
-    flags: app.repository.listFlags(),
+    flags: await app.repository.listFlags(),
   }));
 
   app.get(
     '/api/flags/:key',
     { schema: { params: flagKeyParams } },
     async (request) => {
-      const flag = app.repository.getFlag(request.params.key);
+      const flag = await app.repository.getFlag(request.params.key);
 
       if (!flag) {
         throw new FlagNotFoundError(request.params.key);
@@ -52,7 +52,7 @@ export async function flagRoutes(app, { adminToken } = {}) {
   app.patch(
     '/api/flags/:key',
     { schema: { params: flagKeyParams, body: updateFlagBody } },
-    async (request) => app.repository.updateFlag(
+    async (request) => await app.repository.updateFlag(
       request.params.key,
       request.body,
     ),

@@ -14,8 +14,8 @@
     "start": "node --env-file=.env src/server.js",
     "dev": "node --watch --env-file=.env src/server.js",
     "test": "node --test --test-reporter=spec",
-    "test:db": "node --test --test-reporter=spec test/db/**/*.test.js",
-    "test:contract": "node --test --test-reporter=spec test/contract/**/*.test.js",
+    "test:db": "node --test --test-reporter=spec test/db/postgres.test.js",
+    "test:contract": "node --test --test-reporter=spec test/contract/ofrep.test.js",
     "migrate": "node scripts/migrate.mjs",
     "build": "npm run build --workspaces --if-present",
     "demo": "node scripts/demo.mjs",
@@ -30,8 +30,10 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
     "playwright-core": "^1.64.1",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "yaml": "^2.9.1"
   }
 }

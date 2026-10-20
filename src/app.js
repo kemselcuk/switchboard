@@ -7,8 +7,13 @@ import { ERROR_CODES, normalizeError, sendError } from './errors.js';
 import { createRepository } from './flags/repository.js';
 import { evaluateRoutes } from './flags/evaluate-routes.js';
 import { flagRoutes } from './flags/routes.js';
+import { createLegacyRepository } from './v2/legacy-repository.js';
+import { registerV2Routes } from './v2/routes/index.js';
 
-const REDACT_PATHS = ['req.headers.authorization'];
+const REDACT_PATHS = [
+  'req.headers.authorization',
+  'req.headers["x-api-key"]',
+];
 const PUBLIC_ROOT = fileURLToPath(new URL('../public', import.meta.url));
 
 function buildLoggerOptions(logger) {
@@ -37,6 +42,7 @@ export function buildApp({
   logger = false,
   repository,
   adminToken,
+  v2,
 } = {}) {
   const app = Fastify({
     logger: buildLoggerOptions(logger),
@@ -52,7 +58,16 @@ export function buildApp({
   let db = null;
   let flagRepository = repository;
 
-  if (!flagRepository) {
+  if (v2) {
+    flagRepository = v2.legacyRepository ?? createLegacyRepository(v2.db, {
+      projectId: v2.defaultProjectId,
+      environmentId: v2.defaultEnvironmentId,
+    });
+    app.decorate('v2', v2);
+    app.addHook('onClose', async () => {
+      await v2.destroy?.();
+    });
+  } else if (!flagRepository) {
     db = openDatabase({ dbPath });
 
     try {
@@ -97,6 +112,13 @@ export function buildApp({
 
   app.register(flagRoutes, { adminToken });
   app.register(evaluateRoutes);
+
+  if (v2) {
+    app.register(registerV2Routes, {
+      db: v2.db,
+      adminToken,
+    });
+  }
 
   app.register(fastifyStatic, {
     root: PUBLIC_ROOT,
