@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { openDatabase } from './db.js';
 import { ERROR_CODES, normalizeError, sendError } from './errors.js';
 import { createRepository } from './flags/repository.js';
+import { evaluateRoutes } from './flags/evaluate-routes.js';
 import { flagRoutes } from './flags/routes.js';
 
 const REDACT_PATHS = ['req.headers.authorization'];
@@ -91,6 +92,7 @@ export function buildApp({
   app.get('/healthz', async () => ({ status: 'ok' }));
 
   app.register(flagRoutes, { adminToken });
+  app.register(evaluateRoutes);
 
   return app;
 }

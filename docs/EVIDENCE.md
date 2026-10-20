@@ -65,6 +65,33 @@ Yönetim API'si, auth ve hata zarfı testleri (Görev 020):
 ℹ fail 0
 ```
 
+Deterministik değerlendirme testleri (Görev 030, iki ardışık `npm test`):
+
+```text
+✔ known flag returns the exact evaluation contract
+✔ users are included or excluded according to their bucket
+✔ disabled flag returns FLAG_DISABLED with the computed bucket
+✔ unknown flag returns 200 with FLAG_NOT_FOUND and null fields
+✔ invalid bodies return VALIDATION_ERROR
+✔ evaluation is public while admin routes stay protected
+✔ repository SQLITE errors become 503 without internal details
+✔ bucketFor matches the golden vectors
+✔ the same input returns the same bucket and decision 100 times
+✔ buckets always stay within 0-99
+✔ rollout 0 excludes everyone and rollout 100 includes everyone
+✔ a disabled flag is FLAG_DISABLED regardless of rollout
+✔ different flag keys can place the same user in different buckets
+✔ the 20 percent set is a subset of the 40 percent set for 1000 IDs
+✔ rollout ratios stay within 2 points for 10000 fixed IDs
+✔ flag settings and evaluation survive close and reopen
+
+ℹ tests 52
+ℹ pass 52
+ℹ fail 0
+```
+
+İki ardışık `npm test` çalıştırması da aynı sonucu verdi (52/52).
+
 Geçici DB ile sunucu uçtan uca kontrolü (`PORT=4317`, yerel test token'ı):
 
 ```text

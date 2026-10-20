@@ -44,6 +44,24 @@ export const updateFlagBody = {
   },
 };
 
+export const evaluateBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['flagKey', 'userId'],
+  properties: {
+    flagKey: {
+      type: 'string',
+      pattern: FLAG_KEY_PATTERN,
+    },
+    userId: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      pattern: '\\S',
+    },
+  },
+};
+
 export const flagKeyParams = {
   type: 'object',
   required: ['key'],
