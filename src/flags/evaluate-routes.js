@@ -1,3 +1,4 @@
+import { AppError, ERROR_CODES } from '../errors.js';
 import { evaluateFlag } from './evaluator.js';
 import { evaluateBody } from './schemas.js';
 
@@ -7,7 +8,20 @@ export async function evaluateRoutes(app) {
     { schema: { body: evaluateBody } },
     async (request) => {
       const { flagKey, userId } = request.body;
-      const flag = app.repository.getFlag(flagKey);
+      let flag;
+
+      try {
+        flag = app.repository.getFlag(flagKey);
+      } catch (error) {
+        const unavailable = new AppError(
+          503,
+          ERROR_CODES.EVALUATION_UNAVAILABLE,
+          'Flag storage is unavailable',
+        );
+
+        unavailable.cause = error;
+        throw unavailable;
+      }
 
       if (!flag) {
         return {

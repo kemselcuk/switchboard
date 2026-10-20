@@ -240,3 +240,21 @@ test('repository SQLITE errors become 503 without internal details', async (t) =
   assert.equal(response.body.includes('switchboard.db'), false);
   assert.equal(response.body.includes('stack'), false);
 });
+
+test('a closed database returns 503 instead of 500', async (t) => {
+  const app = createApp(t);
+
+  app.db.close();
+
+  const response = await evaluate(app, {
+    flagKey: 'new-checkout',
+    userId: 'user-123',
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().error.code, 'EVALUATION_UNAVAILABLE');
+  assert.equal(
+    response.body.includes('database connection is not open'),
+    false,
+  );
+});
