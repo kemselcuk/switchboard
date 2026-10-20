@@ -6,3 +6,6 @@ coverage/
 !.env.example
 *.log
 .DS_Store
+
+# Local-only architecture handbook (never published)
+docs/architecture/
