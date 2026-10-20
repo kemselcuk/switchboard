@@ -351,6 +351,13 @@ biçiminde:
 - Merkezi dokümanlar + kısa görev brief'leri.
 - Sessiz video + ekran üstü açıklamalar.
 
+## Dokümanlar
+
+- [Uygulama planı](docs/PLAN.md)
+- [Karar kaydı](docs/DECISIONS.md)
+- [Test/demo kanıtları](docs/EVIDENCE.md)
+- [Bağımsız review ve kapanış](docs/REVIEW.md)
+
 ## Proje yapısı
 
 ```text

@@ -7,7 +7,7 @@ kanıtlarını içerir. Tüm bölümler gerçek çıktılarla doldurulmuştur.
 
 - Tarih: 2026-10-20
 - Makine: macOS (arm64), Node.js 22.23.2, Docker 29.8.1, SQLite 3.51.0
-- Commit: TODO
+- Release commit: `382213c` (`v1.0.0`)
 - GitHub: https://github.com/kemselcuk/switchboard
 
 ## 1. Otomatik testler
@@ -496,6 +496,30 @@ $ curl -s -H 'Authorization: Bearer smoke-token' http://127.0.0.1:3101/api/flags
 
 ## 8. Git kanıtı
 
-```bash
-# TODO: git log --oneline, tag, remote
+```text
+$ git log --oneline -12
+382213c docs: align demo video and evidence with 1.0.0
+4da3d94 chore: release 1.0.0
+fce9100 fix: return 503 when evaluation storage is unavailable
+75aa3f5 docs: add independent final review brief
+2489e8e docs: finalize delivery documentation
+3e4e1c8 feat: add reproducible demo video recording
+307a4bc fix: keep flag list status in sync after creation
+f8208f5 chore: add Docker setup and smoke test
+1b17235 docs: add Docker task brief
+34104db fix: show preserved and newly opened users in demo
+9819367 feat: add demo UI and example client
+a38cdec docs: add demo and client task brief
+
+$ git remote -v
+origin  https://github.com/kemselcuk/switchboard.git (fetch)
+origin  https://github.com/kemselcuk/switchboard.git (push)
+
+$ git tag -l
+v1.0.0
+
+$ git status --short
+(boş)
 ```
+
+Release tag: `v1.0.0` → `382213c`.
