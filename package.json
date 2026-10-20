@@ -11,6 +11,7 @@
     "start": "node --env-file=.env src/server.js",
     "dev": "node --watch --env-file=.env src/server.js",
     "test": "node --test --test-reporter=spec",
+    "demo": "node scripts/demo.mjs",
     "smoke": "bash scripts/smoke-docker.sh"
   },
   "dependencies": {

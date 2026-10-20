@@ -5,7 +5,7 @@ kanıtlarını içerir. Henüz doldurulmamış bölümler `TODO` olarak kalır.
 
 ## Ortam
 
-- Tarih: TODO
+- Tarih: 2026-10-20
 - Makine: macOS (arm64), Node.js 22.23.2, Docker 29.8.1, SQLite 3.51.0
 - Commit: TODO
 - GitHub: https://github.com/kemselcuk/switchboard
@@ -112,37 +112,172 @@ exit=1
 ADMIN_TOKEN is required. Copy .env.example to .env and set a token.
 ```
 
-## 2. Determinizm ve monotonluk
+## 2. Demo UI, örnek istemci ve demo script (Görev 040)
+
+Statik dosyalar geçici bir veritabanıyla çalışan yerel sunucudan (`PORT=3000`)
+istendi:
+
+```text
+HTTP/1.1 200 OK
+content-type: text/html; charset=utf-8
+app.js:200 application/javascript; charset=utf-8
+styles.css:200 text/css; charset=utf-8
+api-unknown:404 application/json; charset=utf-8
+{"error":{"code":"NOT_FOUND","message":"Route not found"}}
+```
+
+`GET /` yanıtında admin token veya varsayılan token değeri yoktur; token
+yalnızca tarayıcıda `sessionStorage` içinde tutulur. Sunucu loglarında da token
+değeri görünmedi (`grep -c 'dev-token-change-me'` → `0`).
+
+Görev 040 sonrası `npm test`:
+
+```text
+✔ GET / serves the single-page demo
+✔ GET /app.js serves the demo script without innerHTML user data
+✔ GET /styles.css serves the demo stylesheet
+✔ unknown API routes keep the JSON NOT_FOUND envelope
+✔ unknown static paths fall back to the JSON NOT_FOUND envelope
+
+ℹ tests 57
+ℹ pass 57
+ℹ fail 0
+```
+
+`npm run demo` (yerel sunucu `http://127.0.0.1:3000`, geçici DB):
+
+```text
+> switchboard@0.1.0 demo
+> node scripts/demo.mjs
+
+Switchboard demo — %20 → %40 rollout
+Servis: http://127.0.0.1:3000
+Flag: demo-checkout (enabled=true, rollout=20%)
+
+USER          BUCKET  %20     %40     DURUM
+------------  ------  ------  ------  -------
+demo-user-01  4       açık    açık    korundu
+demo-user-02  48      kapalı  kapalı  kapalı
+demo-user-03  4       açık    açık    korundu
+demo-user-04  70      kapalı  kapalı  kapalı
+demo-user-05  67      kapalı  kapalı  kapalı
+demo-user-06  93      kapalı  kapalı  kapalı
+demo-user-07  89      kapalı  kapalı  kapalı
+demo-user-08  62      kapalı  kapalı  kapalı
+demo-user-09  17      açık    açık    korundu
+demo-user-10  44      kapalı  kapalı  kapalı
+demo-user-11  46      kapalı  kapalı  kapalı
+demo-user-12  85      kapalı  kapalı  kapalı
+
+Özet: %20'de 3/12 açık, %40'ta 3/12 açık, 3 korundu, 0 yeni açıldı.
+Demo sonunda flag %40 rollout ile açık bırakıldı.
+```
+
+Aynı script ikinci kez çalıştırıldığında mevcut `demo-checkout` flag'ini
+`PATCH /api/flags/demo-checkout` ile güncelledi ve aynı özeti üretti.
+
+`new-checkout` flag'i (`enabled=true`, `rolloutPercentage=40`) ile örnek
+istemci:
+
+```text
+$ node examples/client.mjs --url http://127.0.0.1:3000 --flag new-checkout \
+    --users user-0000,user-0005,user-123
+
+USER       ENABLED  REASON           BUCKET  ROLLOUT
+---------  -------  ---------------  ------  -------
+user-0000  true     BUCKET_INCLUDED  3       40%
+user-0005  true     BUCKET_INCLUDED  30      40%
+user-123   false    BUCKET_EXCLUDED  65      40%
+exit=0
+```
+
+`--help` çıktısı ve çıkış kodu:
+
+```text
+$ node examples/client.mjs --help
+Switchboard örnek istemcisi
+
+Kullanım:
+  node examples/client.mjs --flag <key> --users <id1,id2,...> [--url <baseUrl>]
+
+Seçenekler:
+  --url    Servis adresi (varsayılan: http://127.0.0.1:3000)
+  --flag   Değerlendirilecek flag anahtarı
+  --users  Virgülle ayrılmış kullanıcı ID'leri
+  --help   Bu yardımı göster
+
+Ortam değişkenleri:
+  SWITCHBOARD_URL, SWITCHBOARD_FLAG, SWITCHBOARD_USERS
+
+Çıkış kodları:
+  0  Tüm değerlendirmeler başarılı
+  1 HTTP veya ağ hatası
+  2  Servis 503 döndürdü; enabled=false fallback kullanıldı
+exit=0
+```
+
+503 döndüren yerel bir mock sunucuya karşı fallback davranışı:
+
+```text
+$ node examples/client.mjs --url http://127.0.0.1:4320 --flag demo-checkout \
+    --users demo-user-01,demo-user-02
+
+UYARI: demo-user-01 için servis 503 döndürdü; enabled=false fallback kullanıldı.
+UYARI: demo-user-02 için servis 503 döndürdü; enabled=false fallback kullanıldı.
+USER          ENABLED  REASON                           BUCKET  ROLLOUT
+------------  -------  -------------------------------  ------  -------
+demo-user-01  false    EVALUATION_UNAVAILABLE_FALLBACK  —       —
+demo-user-02  false    EVALUATION_UNAVAILABLE_FALLBACK  —       —
+Servis geçici olarak kullanılamıyor; fallback sonuçları gösterildi.
+exit=2
+```
+
+Ulaşılamayan sunucu için çıkış kodu `1`:
+
+```text
+$ node examples/client.mjs --url http://127.0.0.1:4399 --flag demo-checkout \
+    --users demo-user-01
+
+Hata: http://127.0.0.1:4399 adresine ulaşılamadı: fetch failed
+exit=1
+```
+
+Not: Sabit 12 demo kullanıcısının `demo-checkout` bucket'ları 4, 48, 4, 70,
+67, 93, 89, 62, 17, 44, 46 ve 85'tir. Bu örneklemde %20'de açık olan 3
+kullanıcı %40'ta korunur; 20–39 aralığında bucket olmadığı için yeni açılan
+kullanıcı çıkmaz. Deterministik davranış gereği sonuç budur.
+
+## 3. Determinizm ve monotonluk
 
 ```bash
 # TODO: aynı kullanıcı, %20 ve %40 karşılaştırması
 ```
 
-## 3. API sözleşmesi
+## 4. API sözleşmesi
 
 ```bash
 # TODO: curl örnekleri ve gerçek yanıtlar
 ```
 
-## 4. Yeniden başlatma / kalıcılık
+## 5. Yeniden başlatma / kalıcılık
 
 ```bash
 # TODO: docker compose restart sonrası aynı sonuç
 ```
 
-## 5. Docker smoke testi
+## 6. Docker smoke testi
 
 ```bash
 # TODO: docker compose up/build/health/restart/down çıktıları
 ```
 
-## 6. Demo video
+## 7. Demo video
 
 - Dosya/link: TODO
 - Süre: TODO
 - Gösterilen akış: TODO
 
-## 7. Git kanıtı
+## 8. Git kanıtı
 
 ```bash
 # TODO: git log --oneline, tag, remote

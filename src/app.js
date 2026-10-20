@@ -1,3 +1,6 @@
+import { fileURLToPath } from 'node:url';
+
+import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { openDatabase } from './db.js';
 import { ERROR_CODES, normalizeError, sendError } from './errors.js';
@@ -6,6 +9,7 @@ import { evaluateRoutes } from './flags/evaluate-routes.js';
 import { flagRoutes } from './flags/routes.js';
 
 const REDACT_PATHS = ['req.headers.authorization'];
+const PUBLIC_ROOT = fileURLToPath(new URL('../public', import.meta.url));
 
 function buildLoggerOptions(logger) {
   if (!logger) {
@@ -93,6 +97,11 @@ export function buildApp({
 
   app.register(flagRoutes, { adminToken });
   app.register(evaluateRoutes);
+
+  app.register(fastifyStatic, {
+    root: PUBLIC_ROOT,
+    prefix: '/',
+  });
 
   return app;
 }
