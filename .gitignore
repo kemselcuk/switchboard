@@ -9,3 +9,6 @@ coverage/
 
 # Local-only architecture handbook (never published)
 docs/architecture/
+
+# Workspace build output
+packages/*/dist/

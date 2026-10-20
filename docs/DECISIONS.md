@@ -175,3 +175,105 @@ image uses `npm ci --omit=dev`, Playwright does not enter the image.
   dependency.
 - Recording requires local Chrome and the one-time FFmpeg component.
 - The video is added as evidence at `demo/switchboard-demo.mp4`.
+
+## ADR-013 — OpenFeature/OFREP as the integration contract
+
+**Context:** Other projects need a vendor-neutral way to consume Switchboard.
+A bespoke SDK alone would lock integrations to this repository.
+
+**Decision:** Implement the OFREP 0.4 core API and provide a thin Node/TS SDK
+plus an OpenFeature provider. OFREP is the evaluation boundary; the management
+API remains a normal REST API.
+
+**Consequences:**
+- Existing OFREP providers can talk to Switchboard without custom code.
+- The OpenFeature provider and SDK share the same evaluation contract.
+- The OFREP OpenAPI spec becomes the source of truth for contract tests.
+- SSE/event streams are out of scope for v2.0; polling/per-request evaluation
+  remains available.
+
+## ADR-014 — Project/environment model with environment API keys
+
+**Context:** A single global flag namespace cannot safely serve multiple
+projects or separate staging from production.
+
+**Decision:** Add `projects` → `environments` → `flags` → `flag_configs`.
+Evaluation requests authenticate with environment-scoped server API keys.
+Secrets are returned once and stored as SHA-256 hashes with a lookup prefix.
+
+**Consequences:**
+- Project and environment isolation becomes a first-class invariant.
+- The legacy API maps to a seeded `default` project and `production`
+  environment.
+- Client/browser keys and scopes are deferred to v2.1; server keys only in
+  v2.0.
+- `ADMIN_TOKEN` remains the bootstrap/admin credential in v2.0; RBAC/SSO is
+  deferred.
+
+## ADR-015 — Postgres primary, Kysely dual dialect for the portable core
+
+**Context:** The demo used SQLite. Other projects need concurrent access and
+a realistic self-hosted deployment, but tests should stay fast.
+
+**Decision:** Postgres is the production target. Kysely provides a shared
+repository layer; the v2 core schema is portable enough to run on SQLite for
+local/test usage. Advanced features such as targeting JSON may become
+Postgres-first in v2.1.
+
+**Consequences:**
+- Production deployments can use multiple app instances.
+- SQLite remains useful for local demos and fast tests.
+- Dual-dialect SQL must be covered by integration tests; a feasibility spike
+  happens before committing to it.
+- If dual-dialect cost becomes disproportionate, the fallback is documented:
+  Postgres-only v2 with SQLite retained for the legacy v1 path.
+
+## ADR-016 — 100,000 v2 buckets, legacy bucketing unchanged
+
+**Context:** The v1 algorithm used 100 buckets and integer percentages.
+Increasing precision requires more buckets, but changing the hash would
+reshuffle existing users.
+
+**Decision:** v2 projects use 100,000 buckets and
+`rollout_basis_points` (0–100,000), with hash input
+`projectKey + ":" + flagKey + ":" + targetingKey`. The default/legacy project
+keeps the v1 `flagKey + ":" + userId` hash and 100 buckets.
+
+**Consequences:**
+- v2 supports 0.001% rollout precision.
+- The same user stays in the same bucket across environments.
+- v1 users do not move when the platform is upgraded.
+- The algorithm version boundary is explicit and tested.
+
+## ADR-017 — Backward-compatible API and one-way data migration
+
+**Context:** Existing clients and demos use `/api/flags` and `/api/evaluate`.
+The expansion must not break them.
+
+**Decision:** Keep the legacy routes and response shapes. In v2 mode, a
+compatibility repository maps them to the default project/environment. Provide
+a SQLite → Postgres migration script that copies v1 flags into the default
+project/environment; the old database file is left untouched as a backup.
+
+**Consequences:**
+- Existing integrations keep working after the upgrade.
+- The migration is one-way and explicit; it does not silently delete v1 data.
+- Legacy evaluation uses the v1 bucket algorithm, while new projects use v2
+  bucketing.
+- Documentation must state which surface is legacy and which is current.
+
+## ADR-018 — Root app plus npm workspaces for SDK packages
+
+**Context:** A reusable SDK and provider should be installable independently,
+without moving the existing Fastify application and its tests.
+
+**Decision:** Keep the Fastify app at the repository root. Add
+`packages/sdk-node` and `packages/openfeature-provider` as npm workspaces. The
+server stays JavaScript; SDK/provider are TypeScript.
+
+**Consequences:**
+- The root app and Docker image remain simple.
+- SDK packages can be built and tested independently.
+- Package names are provisional in v2.0; npm publishing is not required for the
+  first release.
+- Workspace builds/tests become part of the root test pipeline.

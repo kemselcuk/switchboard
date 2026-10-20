@@ -1,0 +1,26 @@
+{
+  "name": "@switchboard/openfeature-provider",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenFeature provider for Switchboard",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@openfeature/server-sdk": "^1.23.0",
+    "@switchboard/sdk": "0.0.0"
+  }
+}

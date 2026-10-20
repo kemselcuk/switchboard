@@ -13,18 +13,23 @@ Flags are not an authorization mechanism.
 
 - Node.js 22+ (ESM)
 - Fastify 5
-- SQLite + `better-sqlite3`
+- Postgres primary; Kysely for the v2 repositories
+- SQLite + `better-sqlite3` for legacy/local/test
 - `@fastify/static` (single-page demo)
 - `node:test` + Fastify `inject`
+- npm workspaces: `packages/sdk-node`, `packages/openfeature-provider`
 
 ## Commands
 
 ```bash
-npm ci            # install dependencies
-npm test          # run all tests
-npm run dev       # local development (watch)
-npm start         # run locally
-npm run smoke     # Docker smoke test
+npm ci              # install dependencies
+npm test            # unit/legacy tests
+npm run test:db     # Postgres integration tests
+npm run test:contract # OFREP contract tests
+npm run migrate     # run database migrations
+npm run dev         # local development (watch)
+npm start           # run locally
+npm run smoke       # Docker smoke test
 ```
 
 ## Code rules
@@ -38,11 +43,13 @@ npm run smoke     # Docker smoke test
 
 ## Scope boundaries
 
-Do not add: a custom rule language, segments, A/B analysis, user accounts/RBAC,
-an audit log, multiple environments, SDKs, rate limiting, caching,
-multi-instance support, Postgres, cloud deployment, flag deletion/renaming, or
-authorization via flags. If a new need arises, update `docs/PLAN.md` first and
-ask the user.
+v2.0 includes projects, environments, environment server API keys, OFREP
+evaluation, a Node/TS SDK, and an OpenFeature provider. Still out of scope for
+v2.0: custom rule language, targeting segments, A/B experiments, user
+accounts/RBAC/SSO, audit log, browser SDK, rate limiting, caching, streaming,
+Kubernetes/Helm, SaaS billing, flag deletion/renaming, and authorization via
+flags. If a new need arises, update `docs/EXPANSION_PLAN.md` first and ask the
+user.
 
 ## Workflow
 
@@ -74,7 +81,8 @@ ask the user.
 ## Documentation
 
 - `README.md` — entry point, setup, API, and integration for external users.
-- `docs/PLAN.md` — scope, phases, acceptance criteria.
+- `docs/PLAN.md` — v1 scope, phases, acceptance criteria.
+- `docs/EXPANSION_PLAN.md` — current v2 plan and acceptance criteria.
 - `docs/DECISIONS.md` — ADR-lite decisions.
 - `docs/EVIDENCE.md` — real test/demo evidence.
 - `docs/tasks/` — short task briefs.
@@ -83,6 +91,8 @@ ask the user.
 
 - `ADMIN_TOKEN` is read only from an environment variable.
 - Token comparison is constant-time.
-- Error responses contain no stack trace, file path, or token.
+- Environment API keys are returned once, stored as SHA-256 hashes with a
+  lookup prefix, and never logged.
+- Error responses contain no stack trace, file path, token, or API key.
 - The demo page does not embed the token in HTML; it uses `sessionStorage`.
 - Flags are not used for authorization; this warning stays in the README.
