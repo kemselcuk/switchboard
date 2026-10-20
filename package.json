@@ -24,7 +24,8 @@
     "predemo:v2": "npm run build",
     "demo:v2": "node scripts/demo-v2.mjs",
     "smoke": "bash scripts/smoke-docker.sh",
-    "record:demo": "node scripts/record-demo.mjs"
+    "record:demo": "node scripts/record-demo.mjs",
+    "record:demo:v2": "node scripts/record-v2-demo.mjs"
   },
   "dependencies": {
     "@fastify/static": "^10.1.6",

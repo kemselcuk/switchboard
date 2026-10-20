@@ -10,8 +10,132 @@ evidence. All sections are filled with real output.
 
 - Date: 2026-10-20
 - Machine: macOS (arm64), Node.js 22.23.2, Docker 29.8.1, SQLite 3.51.0
-- Release tag: `v1.0.0` (code release; English docs on main)
+- Release: `v2.0.0` (tag after review findings close)
 - GitHub: https://github.com/kemselcuk/switchboard
+
+## v2.0.0 review follow-up evidence (current)
+
+This section records the follow-up work that closed the independent v2 review
+starting from commit `ae8e8fa`. Commands were run from the repository root on
+2026-10-20.
+
+### Unit and integration suite
+
+```text
+npm test
+ℹ tests 100
+ℹ suites 0
+ℹ pass 99
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 1708.601333
+```
+
+The skipped test is the Postgres integration test, which runs when
+`DATABASE_URL` is set.
+
+### Postgres integration
+
+```text
+DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run test:db
+✔ Postgres migrations and v2 evaluation flow (144.686916ms)
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0
+```
+
+### OFREP contract and official provider
+
+`npm run test:contract` now includes the official `@openfeature/ofrep-provider`
+against a live local server, quoted ETag/304 handling, OFREP-shaped 400 errors,
+and 500/503 general errors.
+
+```text
+npm run test:contract
+✔ official OFREP provider evaluates against the service
+✔ vendored OFREP contract exposes the required core paths
+✔ single OFREP response matches the official schema
+✔ bulk OFREP response matches the official schema
+✔ OFREP not-found response matches the official schema
+✔ quoted bulk ETag round-trips and is resent on 304
+✔ bulk ETag is scoped to the project key
+✔ single OFREP 400 matches the evaluationFailure schema
+✔ bulk OFREP 400 matches the bulkEvaluationFailure schema
+✔ OFREP storage failures use a general error body
+✔ OFREP 500 uses the generalErrorResponse schema
+ℹ tests 11
+ℹ pass 11
+```
+
+### SDK and OpenFeature provider workspaces
+
+```text
+npm run test:workspaces
+> @switchboard/openfeature-provider@2.0.0 test
+# tests 3
+# pass 3
+> @switchboard/sdk@2.0.0 test
+# tests 5
+# pass 5
+```
+
+### Clean-checkout demo path
+
+A copy without `.git`, `node_modules`, `data`, or `packages/*/dist` was created,
+then `npm ci` was run. `npm run demo:v2` built both packages through
+`predemo:v2` and ran both services:
+
+```text
+> switchboard@2.0.0 demo:v2
+> node scripts/demo-v2.mjs
+
+Project: demo
+Environment: production
+Flag: new-checkout (40%)
+API key prefix: sb_srv_904a766c
+
+{"service":"service-a","transport":"sdk","flag":"new-checkout","user":"demo-user-07","enabled":true,"reason":"SPLIT","errorCode":null}
+{"service":"service-b","transport":"openfeature","flag":"new-checkout","user":"demo-user-07","enabled":true,"reason":"SPLIT","errorCode":null}
+```
+
+### Legacy numeric ID migration
+
+The v1 → Postgres migration was rerun against a clean evidence database with a
+v1 flag whose SQLite ID was `1`:
+
+```text
+DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard_evidence \
+SQLITE_PATH=$TMPDIR/legacy.db npm run migrate:legacy
+Legacy migration complete: 1 migrated, 0 skipped, 1 total.
+```
+
+`GET /api/flags` returned the preserved numeric ID:
+
+```json
+{"flags":[{"id":1,"key":"cli-migrated","description":"","enabled":true,"rolloutPercentage":37,"createdAt":"2026-10-20T18:10:02.624Z","updatedAt":"2026-10-20T18:10:02.624Z"}]}
+```
+
+`POST /api/evaluate` kept the v1 bucket algorithm:
+
+```json
+{"flagKey":"cli-migrated","userId":"demo-user-07","enabled":false,"reason":"BUCKET_EXCLUDED","bucket":77,"rolloutPercentage":37}
+```
+
+### v2 video
+
+- File: [`demo/switchboard-v2-demo.mp4`](../demo/switchboard-v2-demo.mp4)
+- Duration: `136.8` seconds (2:17), silent, 1280×720.
+- Size: `1,137,314` bytes.
+- SHA-256: `f5c083707e8ed520bccbf7e2ac3f6b58ccc6b5c35576532ca7dd8da5a1f43768`.
+- Covers: admin/project/environment/flag/API-key setup, OFREP evaluation,
+  cross-project isolation (`404`), 20%→40% monotonicity over 500 fixed IDs
+  (102 → 211 included, subset `true`), both example services, and the legacy
+  numeric ID (`1`).
+- Recorded with `npm run record:demo:v2` against a real local v2 SQLite server.
+
+## Historical v1 evidence
 
 ## 1. Automated tests
 
@@ -596,11 +720,9 @@ npm run migrate:legacy
 Legacy migration complete: 1 migrated, 0 skipped, 1 total.
 ```
 
-The migrated legacy flag was then read through `/api/flags`:
-
-```json
-{"flags":[{"id":"2d55ada0-50a5-4cfd-b2b9-9468f366c9a6","key":"cli-migrated","description":"","enabled":true,"rolloutPercentage":37,"createdAt":"2026-10-20T17:12:44.234Z","updatedAt":"2026-10-20T17:12:44.234Z"}]}
-```
+The migrated legacy flag was then read through `/api/flags`. This early run
+predates the numeric `legacy_id` compatibility work; the current evidence
+section above records the preserved numeric ID.
 
 ### Docker Compose v2 smoke
 
@@ -622,4 +744,4 @@ Smoke test passed: legacy and v2 flags survived restart and down/up.
 
 `GET /v2.html` is covered by the static tests; it provides project,
 environment, flag, API-key and OFREP evaluation forms. The admin token and API
-key are stored in browser storage only, never in HTML.
+key are stored in `sessionStorage` only, never in HTML.

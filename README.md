@@ -10,6 +10,9 @@ The v1 single-environment API remains available. v2 adds projects,
 environments, environment API keys, OFREP, and a Node/TypeScript SDK with an
 OpenFeature provider.
 
+[Watch the 2:17 silent v2 demo](demo/switchboard-v2-demo.mp4) — projects,
+project isolation, 20%→40% monotonicity, two services, and the legacy API.
+
 > This is a demo/portfolio project evolving into a reusable platform. Feature
 > flags are not an authorization mechanism and should not replace production
 > auth.
@@ -279,8 +282,8 @@ npm run test:workspaces # SDK/provider build + tests
 npm run smoke         # Docker Compose + Postgres smoke test
 ```
 
-Current local suite: 91 tests, with the Postgres integration test skipped when
-`DATABASE_URL` is not set.
+Current local suite: 100 tests, 99 pass, 1 skipped when `DATABASE_URL` is not
+set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)
 
@@ -324,8 +327,8 @@ examples/
   string/number/JSON flags are later work.
 - Server API keys only; browser/client keys and a browser SDK are later work.
 - Single Postgres instance target; no streaming/cache/rate limiting yet.
-- The v1 browser demo and video are still in Turkish; the v2 API and
-  documentation are in English.
+- The v1 browser demo and video are in Turkish; the v2 demo video and the v2
+  API/docs are in English.
 - Feature flags must not replace authorization.
 
 ## License
