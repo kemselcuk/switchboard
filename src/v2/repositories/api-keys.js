@@ -2,6 +2,27 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 
 import { isUniqueViolation, notFound } from './common.js';
 
+export const API_KEY_CACHE_TTL_MS = 5000;
+
+// One cache per Kysely instance so repositories created separately over the
+// same database (OFREP auth hook, management routes) share their entries.
+const apiKeyCaches = new WeakMap();
+
+function cacheFor(db) {
+  let cache = apiKeyCaches.get(db);
+
+  if (!cache) {
+    cache = new Map();
+    apiKeyCaches.set(db, cache);
+  }
+
+  return cache;
+}
+
+function invalidateApiKeyCache(db) {
+  apiKeyCaches.get(db)?.clear();
+}
+
 export function hashApiKey(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
@@ -46,6 +67,7 @@ export function createApiKeyRepository(db) {
 
       try {
         await db.insertInto('api_keys').values(row).execute();
+        invalidateApiKeyCache(db);
 
         return {
           id: row.id,
@@ -105,10 +127,23 @@ export function createApiKeyRepository(db) {
       throw notFound('API_KEY_NOT_FOUND', 'API key not found');
     }
 
+    invalidateApiKeyCache(db);
+
     return { id, revoked: true };
   }
 
   async function findApiKeyByPrefix(prefix) {
+    const cache = cacheFor(db);
+    const cached = cache.get(prefix);
+
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.record;
+    }
+
+    if (cached) {
+      cache.delete(prefix);
+    }
+
     const row = await db
       .selectFrom('api_keys')
       .innerJoin('environments', 'environments.id', 'api_keys.environment_id')
@@ -129,7 +164,18 @@ export function createApiKeyRepository(db) {
       .where('api_keys.prefix', '=', prefix)
       .executeTakeFirst();
 
-    return row ?? null;
+    if (!row) {
+      return null;
+    }
+
+    // Only found records are cached: unknown prefixes keep hitting the
+    // database, so a freshly created key is never shadowed by a miss.
+    cache.set(prefix, {
+      record: row,
+      expiresAt: Date.now() + API_KEY_CACHE_TTL_MS,
+    });
+
+    return row;
   }
 
   async function touchApiKey(id, lastUsedAt) {
@@ -141,11 +187,27 @@ export function createApiKeyRepository(db) {
       }
     }
 
+    const usedAt = new Date().toISOString();
+
     await db
       .updateTable('api_keys')
-      .set({ last_used_at: new Date().toISOString() })
+      .set({ last_used_at: usedAt })
       .where('id', '=', id)
       .execute();
+
+    // Keep cached copies in step with the write so the once-per-minute
+    // throttle still sees the fresh timestamp on the next cache hit.
+    const cache = apiKeyCaches.get(db);
+
+    if (!cache) {
+      return;
+    }
+
+    for (const entry of cache.values()) {
+      if (entry.record.key_id === id) {
+        entry.record.last_used_at = usedAt;
+      }
+    }
   }
 
   return {
