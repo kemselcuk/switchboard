@@ -214,6 +214,11 @@ In v2 mode, legacy routes map to the seeded `default` / `production`
 project/environment and keep the v1 bucket algorithm. In v1 mode, they use the
 original SQLite repository.
 
+`/api/flags` keeps the numeric `id` used by v1 clients. The `flags` table has a
+nullable `legacy_id` compatibility column: existing SQLite integer IDs are
+preserved by the migration, and new flags receive the next numeric ID in their
+project. v2 management responses keep the UUID `id`.
+
 ## Deterministic algorithm
 
 ### v2 projects

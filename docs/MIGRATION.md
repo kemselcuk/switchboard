@@ -32,8 +32,8 @@ The command:
 - reads `flags` from the legacy SQLite file in read-only mode;
 - creates missing rows in the seeded `default` project and `production`
   environment;
-- preserves key, description, enabled state, rollout percentage, and
-  timestamps;
+- preserves key, description, enabled state, rollout percentage, timestamps,
+  and the legacy numeric `id` (stored in `flags.legacy_id`);
 - skips flags that already have a config in that environment;
 - is idempotent, so it is safe to run again.
 
@@ -87,5 +87,9 @@ No destructive SQLite migration is performed.
 - The default project/environment is created automatically on first v2 startup.
 - `flagKey` remains immutable; a migrated key is the same key used by legacy
   clients.
+- The legacy numeric `id` is preserved in `flags.legacy_id`. If that number is
+  already taken by a flag created through the v2 API in the default project,
+  the migration assigns the next free number instead (the old row is never
+  overwritten).
 - New projects use the v2 100,000-bucket algorithm. The default/legacy project
   keeps the v1 100-bucket algorithm.

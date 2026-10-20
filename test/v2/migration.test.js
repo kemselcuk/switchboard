@@ -52,7 +52,35 @@ test('migrates legacy SQLite flags and preserves evaluation', async (t) => {
   });
   assert.equal(list.statusCode, 200);
   assert.equal(list.json().flags[0].key, 'legacy-checkout');
+  assert.equal(list.json().flags[0].id, legacyFlag.id);
   assert.equal(list.json().flags[0].rolloutPercentage, 37);
+
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/flags',
+    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+    payload: { key: 'created-after-migration', enabled: true, rolloutPercentage: 10 },
+  });
+  assert.equal(created.statusCode, 201);
+  assert.equal(created.json().id, legacyFlag.id + 1);
+
+  const v2Default = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects/default/environments/production/flags',
+    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+    payload: { key: 'v2-default-flag', enabled: true, rolloutPercentage: 20 },
+  });
+  assert.equal(v2Default.statusCode, 201);
+
+  const after = await app.inject({
+    method: 'GET',
+    url: '/api/flags',
+    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+  });
+  const v2DefaultLegacy = after.json().flags.find(
+    (flag) => flag.key === 'v2-default-flag',
+  );
+  assert.equal(v2DefaultLegacy.id, legacyFlag.id + 2);
 
   const evaluation = await app.inject({
     method: 'POST',

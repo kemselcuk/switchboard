@@ -60,6 +60,29 @@ test('supports the same flag key in two environments', async (t) => {
   assert.equal(staging.json().rolloutPercentage, 10);
 });
 
+test('exposes per-project numeric legacy ids on the legacy API', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app, 'demo');
+  await createEnvironment(app, 'demo');
+
+  await createFlag(app, 'demo', 'production', { key: 'demo-flag' });
+  await createFlag(app, 'default', 'production', { key: 'default-flag' });
+  await createFlag(app, 'default', 'production', { key: 'second-default-flag' });
+
+  const legacy = await app.inject({
+    method: 'GET',
+    url: '/api/flags',
+    headers: AUTHORIZATION,
+  });
+
+  assert.equal(legacy.statusCode, 200);
+  const flags = legacy.json().flags;
+  assert.deepEqual(
+    flags.map((flag) => [flag.key, flag.id]),
+    [['default-flag', 1], ['second-default-flag', 2]],
+  );
+});
+
 test('patches flag description, enabled state and rollout', async (t) => {
   const { app } = await createV2App(t);
   await createProject(app);

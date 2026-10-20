@@ -2,6 +2,35 @@ import { randomUUID } from 'node:crypto';
 
 import Database from 'better-sqlite3';
 
+async function isLegacyIdTaken(trx, projectId, legacyId) {
+  const row = await trx
+    .selectFrom('flags')
+    .select('id')
+    .where('project_id', '=', projectId)
+    .where('legacy_id', '=', legacyId)
+    .executeTakeFirst();
+
+  return Boolean(row);
+}
+
+async function allocateLegacyId(trx, projectId, preferred) {
+  if (
+    Number.isInteger(preferred)
+    && preferred > 0
+    && !(await isLegacyIdTaken(trx, projectId, preferred))
+  ) {
+    return preferred;
+  }
+
+  const row = await trx
+    .selectFrom('flags')
+    .select((builder) => builder.fn.max('legacy_id').as('max_legacy_id'))
+    .where('project_id', '=', projectId)
+    .executeTakeFirst();
+
+  return Number(row?.max_legacy_id ?? 0) + 1;
+}
+
 export function readLegacyFlags(legacyDbPath) {
   const source = new Database(legacyDbPath, {
     readonly: true,
@@ -19,6 +48,7 @@ export function readLegacyFlags(legacyDbPath) {
 
     return source.prepare(`
       SELECT
+        id,
         key,
         description,
         enabled,
@@ -48,12 +78,22 @@ export async function migrateLegacyFlags({
     for (const flag of flags) {
       const existingFlag = await trx
         .selectFrom('flags')
-        .select('id')
+        .select(['id', 'legacy_id'])
         .where('project_id', '=', projectId)
         .where('key', '=', flag.key)
         .executeTakeFirst();
 
       if (existingFlag) {
+        if (existingFlag.legacy_id === null || existingFlag.legacy_id === undefined) {
+          await trx
+            .updateTable('flags')
+            .set({
+              legacy_id: await allocateLegacyId(trx, projectId, Number(flag.id)),
+            })
+            .where('id', '=', existingFlag.id)
+            .execute();
+        }
+
         const existingConfig = await trx
           .selectFrom('flag_configs')
           .select('id')
@@ -89,6 +129,7 @@ export async function migrateLegacyFlags({
         .insertInto('flags')
         .values({
           id: flagId,
+          legacy_id: await allocateLegacyId(trx, projectId, Number(flag.id)),
           project_id: projectId,
           key: flag.key,
           type: 'boolean',

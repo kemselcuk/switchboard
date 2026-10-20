@@ -6,7 +6,7 @@ import { createFlagRepository } from './repositories/flags.js';
 
 function toLegacyFlag(flag) {
   return {
-    id: flag.id,
+    id: flag.legacyId,
     key: flag.key,
     description: flag.description,
     enabled: flag.enabled,

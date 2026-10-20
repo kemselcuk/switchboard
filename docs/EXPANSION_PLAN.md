@@ -40,7 +40,7 @@ Tables:
 |---|---|---|
 | `projects` | `id`, `key`, `name`, timestamps | `key` unique |
 | `environments` | `id`, `project_id`, `key`, `name` | `(project_id, key)` unique |
-| `flags` | `id`, `project_id`, `key`, `type`, `description` | `(project_id, key)` unique; immutable key |
+| `flags` | `id`, `project_id`, `key`, `type`, `description`, `legacy_id` | `(project_id, key)` unique; immutable key; `legacy_id` is the numeric v1 compatibility ID |
 | `flag_configs` | `id`, `flag_id`, `environment_id`, `enabled`, `rollout_basis_points` | `(flag_id, environment_id)` unique |
 | `api_keys` | `id`, `environment_id`, `type`, `name`, `prefix`, `hash`, `last_used_at`, `revoked_at` | secret returned once |
 | `schema_migrations` | Kysely migrator state | managed by Kysely |

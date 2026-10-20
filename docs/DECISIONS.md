@@ -277,3 +277,23 @@ server stays JavaScript; SDK/provider are TypeScript.
 - Package names are provisional in v2.0; npm publishing is not required for the
   first release.
 - Workspace builds/tests become part of the root test pipeline.
+
+## ADR-019 — Numeric `legacy_id` compatibility column
+
+**Context:** v1 `/api/flags` exposed an auto-increment integer `id`. v2 uses
+UUIDs internally, but existing clients may store or compare the numeric ID.
+
+**Decision:** `flags.legacy_id` is a nullable integer, unique per project.
+Migration 002 backfills existing rows; the v1→v2 migration preserves the old
+SQLite `id`; new flags receive `max(legacy_id) + 1` inside the project
+transaction, with retry on a concurrent unique conflict. Legacy responses use
+`legacy_id`; v2 management responses keep the UUID `id`.
+
+**Consequences:**
+- Legacy clients keep the same numeric IDs after the upgrade.
+- Per-project numbering means two projects can both start at `1`; the legacy
+  API only exposes the default project.
+- A pre-existing default-project v2 flag can occupy a number before a legacy
+  import; the import then allocates the next free number instead of
+  overwriting rows.
+- `legacy_id` is not a v2 public identifier and is not used for evaluation.

@@ -41,6 +41,7 @@ export function mapFlag(row) {
 
   return {
     id: row.flag_id,
+    legacyId: row.legacy_id,
     key: row.key,
     type: row.type,
     description: row.description,
