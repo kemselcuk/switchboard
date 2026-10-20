@@ -283,7 +283,7 @@ npm run test:workspaces # SDK/provider build + tests
 npm run smoke         # Docker Compose + Postgres smoke test
 ```
 
-Current local suite: 100 tests, 99 pass, 1 skipped when `DATABASE_URL` is not
+Current local suite: 106 tests, 103 pass, 3 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)

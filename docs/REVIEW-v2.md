@@ -37,18 +37,19 @@ migration, security, and evidence. B1 (cross-environment mutation on a failed
 | m9 | Migration rollback mentioned `DATABASE_URL` ambiguously | Fixed in `docs/MIGRATION.md` |
 | m10 | Compose default password/port exposure | Fixed in `feae0c6`: required `POSTGRES_PASSWORD`, localhost bindings |
 | m11 | EVIDENCE browser-storage wording and release metadata | Fixed in `98c4e5d`: `sessionStorage`, v2 release metadata, current outputs |
-| n1 | Optional API-key prefix collision handling | Open; prefix uniqueness is enforced and collisions are vanishingly rare in v2.0 |
-| n2 | Optional last-used write reduction | Open; v2.0 keeps one timestamp update per authenticated evaluation |
-| n3 | Optional URL-encoded Postgres password | Open; documented as a deployment caveat rather than a release blocker |
+| n1 | Optional API-key prefix collision handling | Closed in `a3884e2`: insert retries with a fresh prefix; duplicate prefix index removed in migration `004_drop_duplicate_prefix_index.mjs` |
+| n2 | Optional last-used write reduction | Closed in `a3884e2`: `last_used_at` is refreshed at most once per minute per key |
+| n3 | Optional URL-encoded Postgres password | Documented deployment caveat; Compose requires an explicit password and binds to localhost |
 
 ## Final verification
 
-Run before tagging:
-
 ```text
-npm test
-npm run test:contract
-npm run test:workspaces
-npm run test:db        # with DATABASE_URL
-npm run smoke
+npm test                 # twice: 106 tests, 103 pass, 3 skipped
+npm run test:contract    # 11 pass
+npm run test:workspaces  # sdk 5/5, provider 3/3
+npm run test:db          # 3 pass with Postgres
+npm run smoke            # legacy + v2 survived restart and down/up
+npm run migrate          # creates the V2_DB_PATH SQLite database
 ```
+
+The `v2.0.0` tag is created only after these checks and the final docs commit.

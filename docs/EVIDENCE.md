@@ -23,26 +23,28 @@ starting from commit `ae8e8fa`. Commands were run from the repository root on
 
 ```text
 npm test
-ℹ tests 100
+ℹ tests 106
 ℹ suites 0
-ℹ pass 99
+ℹ pass 103
 ℹ fail 0
 ℹ cancelled 0
-ℹ skipped 1
+ℹ skipped 3
 ℹ todo 0
-ℹ duration_ms 1708.601333
+ℹ duration_ms 1513.45675
 ```
 
-The skipped test is the Postgres integration test, which runs when
-`DATABASE_URL` is set.
+The skipped tests are the Postgres integration tests, which run when
+`DATABASE_URL` is set. A second consecutive run produced the same counts.
 
 ### Postgres integration
 
 ```text
 DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run test:db
-✔ Postgres migrations and v2 evaluation flow (144.686916ms)
-ℹ tests 1
-ℹ pass 1
+✔ maps a Postgres storage failure to 503 (109.822459ms)
+✔ Postgres migrations and v2 evaluation flow (62.503292ms)
+✔ Postgres covers migration, legacy routes, isolation and revocation (66.919458ms)
+ℹ tests 3
+ℹ pass 3
 ℹ fail 0
 ```
 
@@ -134,6 +136,18 @@ Legacy migration complete: 1 migrated, 0 skipped, 1 total.
   (102 → 211 included, subset `true`), both example services, and the legacy
   numeric ID (`1`).
 - Recorded with `npm run record:demo:v2` against a real local v2 SQLite server.
+
+### Docker Compose smoke
+
+```text
+npm run smoke
+health: {"status":"ok"}
+flag after down/up: {"id":1,"key":"smoke-flag","description":"Docker smoke test","enabled":true,"rolloutPercentage":20,"createdAt":"2026-10-20T18:32:06.855Z","updatedAt":"2026-10-20T18:32:06.855Z"}
+v2 after down/up: {"key":"smoke-v2-flag","value":true,"reason":"SPLIT","variant":"enabled"}
+OK: v2.down-up.value = true
+
+Smoke test passed: legacy and v2 flags survived restart and down/up.
+```
 
 ## Historical v1 evidence
 
