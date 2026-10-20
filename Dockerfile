@@ -6,6 +6,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
+COPY packages/sdk-node/package.json ./packages/sdk-node/package.json
+COPY packages/openfeature-provider/package.json ./packages/openfeature-provider/package.json
 
 # better-sqlite3 ships prebuilt binaries for common platforms. If the download
 # is unavailable, fall back to a local build with tools installed only here.
@@ -27,6 +29,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
 COPY public ./public
+COPY db ./db
+COPY scripts/migrate.mjs ./scripts/migrate.mjs
 
 RUN mkdir -p /app/data && chown -R node:node /app
 
@@ -34,4 +38,4 @@ USER node
 
 EXPOSE 3000
 
-CMD ["node", "src/server.js"]
+CMD ["sh", "-c", "npm run migrate && node src/server.js"]

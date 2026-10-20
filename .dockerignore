@@ -10,8 +10,13 @@ coverage
 .DS_Store
 test
 examples
-scripts
+scripts/demo.mjs
+scripts/demo-v2.mjs
+scripts/smoke-docker.sh
+scripts/record-demo.mjs
 docs
 assets
 demo
 compose.yaml
+packages/*/dist
+packages/*/test

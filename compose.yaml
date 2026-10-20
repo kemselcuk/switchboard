@@ -1,16 +1,35 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: switchboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-switchboard}
+      POSTGRES_DB: switchboard
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - switchboard-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U switchboard -d switchboard
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   switchboard:
     build: .
     init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${PORT:-3000}:3000"
     environment:
       ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN is required. Set it in .env or the environment.}
-      DB_PATH: /app/data/switchboard.db
+      DATABASE_URL: postgres://switchboard:${POSTGRES_PASSWORD:-switchboard}@postgres:5432/switchboard
       HOST: 0.0.0.0
       LOG_LEVEL: ${LOG_LEVEL:-info}
-    volumes:
-      - switchboard-data:/app/data
     healthcheck:
       test:
         - CMD
@@ -23,4 +42,4 @@ services:
       start_period: 5s
 
 volumes:
-  switchboard-data:
+  switchboard-pg-data:

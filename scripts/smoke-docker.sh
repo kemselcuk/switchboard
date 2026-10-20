@@ -12,6 +12,8 @@ COMPOSE=(docker compose -p "$PROJECT_NAME")
 # take precedence over .env values during Compose interpolation.
 export ADMIN_TOKEN="$TOKEN"
 export PORT
+export POSTGRES_PORT="55433"
+export POSTGRES_PASSWORD="smoke-postgres"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
