@@ -149,6 +149,60 @@ OK: v2.down-up.value = true
 Smoke test passed: legacy and v2 flags survived restart and down/up.
 ```
 
+## v2.1 performance/ops track
+
+`npm run bench` uses a dependency-free load driver (`node:http`, sequential
+requests per connection) against a real locally started server. Baseline
+below was recorded **before** the quick wins (`DURATION=10`, `CONNECTIONS=10`).
+
+### Baseline — SQLite (before quick wins)
+
+```text
+npm run bench
+Dialect: sqlite
+Connections: 10, duration: 10s per scenario
+
+Scenario: single-flag (bench-flag)
+  Requests/sec: 6784.3
+  Latency avg: 1.47 ms
+  Latency p50: 1.35 ms
+  Latency p99: 3.1 ms
+  Errors: 0, non-2xx: 0
+
+Scenario: bulk-flags
+  Requests/sec: 6200.6
+  Latency avg: 1.6 ms
+  Latency p50: 1.44 ms
+  Latency p99: 4.51 ms
+  Errors: 0, non-2xx: 0
+```
+
+### Baseline — Postgres (before quick wins)
+
+```text
+BENCH_DURATION=10 DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run bench
+Dialect: postgres
+Connections: 10, duration: 10s per scenario
+
+Scenario: single-flag (bench-flag)
+  Requests/sec: 724.8
+  Latency avg: 13.77 ms
+  Latency p50: 9.49 ms
+  Latency p99: 69.72 ms
+  Errors: 0, non-2xx: 0
+
+Scenario: bulk-flags
+  Requests/sec: 1243
+  Latency avg: 8.04 ms
+  Latency p50: 7.56 ms
+  Latency p99: 20.97 ms
+  Errors: 0, non-2xx: 0
+```
+
+`npm audit`: `found 0 vulnerabilities` (the first attempt used `autocannon`
+as a dev dependency; it pulled a vulnerable `uuid` and was replaced by the
+built-in load driver before commit).
+
 ## Historical v1 evidence
 
 ## 1. Automated tests
