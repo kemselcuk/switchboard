@@ -10,7 +10,7 @@ evidence. All sections are filled with real output.
 
 - Date: 2026-10-20
 - Machine: macOS (arm64), Node.js 22.23.2, Docker 29.8.1, SQLite 3.51.0
-- Release tag: `v1.0.0` (this commit)
+- Release tag: `v1.0.0` (code release; English docs on main)
 - GitHub: https://github.com/kemselcuk/switchboard
 
 ## 1. Automated tests
@@ -497,7 +497,7 @@ $ curl -s -H 'Authorization: Bearer smoke-token' http://127.0.0.1:3101/api/flags
   5. `%20 → %40` comparison: 4/12 included → 8/12 included, 4 preserved,
      4 newly opened.
   6. After the server process restarts, `bucket 4 → 4` and status
-     `Açık → Açık` for the same user.
+     `Open → Open` (Turkish UI: `Açık → Açık`) for the same user.
   7. `npm test`: 58/58 pass.
 
 ## 8. Git evidence
@@ -528,4 +528,4 @@ $ git status --short
 (boş)
 ```
 
-Release tag: `v1.0.0` (this commit).
+Release tag: `v1.0.0` (code release). English documentation is on `main` after the release commit.

@@ -28,9 +28,9 @@ of scope.
 ## Algorithm
 
 ```text
-u32    = SHA-256(flagKey + ":" + userId) ilk 4 byte, big-endian
+u32    = SHA-256(flagKey + ":" + userId) first 4 bytes, big-endian
 bucket = floor((u32 / 2^32) * 100)        // 0–99
-açık   = enabled && bucket < rolloutPercentage
+open   = enabled && bucket < rolloutPercentage
 ```
 
 - Export `BUCKET_ALGORITHM_VERSION = 1`.

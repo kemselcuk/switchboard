@@ -35,7 +35,7 @@ Body:
 ```json
 {
   "key": "new-checkout",
-  "description": "Yeni ödeme akışı",
+  "description": "New checkout flow",
   "enabled": true,
   "rolloutPercentage": 20
 }

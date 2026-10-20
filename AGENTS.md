@@ -20,11 +20,11 @@ Flags are not an authorization mechanism.
 ## Commands
 
 ```bash
-npm ci            # bağımlılıkları kur
-npm test          # tüm testler
-npm run dev       # yerel geliştirme (watch)
-npm start         # yerel çalışma
-npm run smoke     # Docker smoke testi
+npm ci            # install dependencies
+npm test          # run all tests
+npm run dev       # local development (watch)
+npm start         # run locally
+npm run smoke     # Docker smoke test
 ```
 
 ## Code rules

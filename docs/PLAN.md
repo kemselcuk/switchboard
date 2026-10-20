@@ -26,7 +26,7 @@ deletion/renaming.
 | Errors/outage | DB failure `503` + `EVALUATION_UNAVAILABLE`; no silent fail-open |
 | Admin | `ADMIN_TOKEN` + `Authorization: Bearer`; evaluate/health public |
 | Demo | 1–2 min silent video + short on-screen captions + README evidence |
-| Learning | 5–10 min walkthrough in Turkish of decisions and trade-offs at each milestone |
+| Learning | 5–10 min walkthrough of decisions and trade-offs at each milestone |
 | Documentation | README + `docs/PLAN.md`, `DECISIONS.md`, `EVIDENCE.md` + short task briefs |
 | Subagents | 3 roles, at most 2 at a time; implementer + fresh-context verifier + docs/demo |
 | Model | DeepSeek V4.1 Flash `max`; coding and tests on this model |
@@ -40,30 +40,30 @@ deletion/renaming.
 
 ```text
 src/
-  app.js                 # buildApp(): test edilebilir Fastify uygulaması
-  server.js              # env okuma, dinleme, graceful shutdown
-  db.js                  # SQLite bağlantısı, şema, PRAGMA'lar
-  auth.js                # Bearer token doğrulama
-  errors.js              # ortak hata zarfı ve hata sınıfları
+  app.js                 # buildApp(): testable Fastify application
+  server.js              # env, listening, graceful shutdown
+  db.js                  # SQLite connection, schema, PRAGMAs
+  auth.js                # Bearer token verification
+  errors.js              # shared error envelope and error classes
   flags/
     repository.js        # flag CRUD
-    evaluator.js         # saf deterministik değerlendirme
-    routes.js            # admin + evaluate route'ları
-    schemas.js           # JSON schema'lar
+    evaluator.js         # pure deterministic evaluation
+    routes.js            # admin + evaluate routes
+    schemas.js           # JSON schemas
 public/
-  index.html             # tek sayfalık demo
+  index.html             # single-page demo
   app.js
   styles.css
 examples/
-  client.mjs             # küçük örnek istemci
+  client.mjs             # small example client
 test/
   evaluator.test.js
   flags.api.test.js
   evaluate.api.test.js
   persistence.test.js
 scripts/
-  demo.sh                # tekrarlanabilir demo adımları
-  smoke-docker.sh        # Docker smoke testi
+  demo.mjs               # reproducible demo steps
+  smoke-docker.sh        # Docker smoke test
 docs/
   PLAN.md
   DECISIONS.md
@@ -101,7 +101,7 @@ SQLite settings: `journal_mode = WAL`, `foreign_keys = ON`,
 ```json
 {
   "key": "new-checkout",
-  "description": "Yeni ödeme akışı",
+  "description": "New checkout flow",
   "enabled": true,
   "rolloutPercentage": 20
 }
@@ -162,9 +162,9 @@ Codes: `UNAUTHORIZED`, `VALIDATION_ERROR`, `FLAG_EXISTS`, `FLAG_NOT_FOUND`,
 ## 5. Deterministic algorithm
 
 ```text
-u32    = SHA-256(flagKey + ":" + userId) ilk 4 byte, big-endian
+u32    = SHA-256(flagKey + ":" + userId) first 4 bytes, big-endian
 bucket = floor((u32 / 2^32) * 100)        // 0–99
-açık   = enabled && bucket < rolloutPercentage
+open   = enabled && bucket < rolloutPercentage
 ```
 
 - `flagKey` is immutable; there is no rename.
