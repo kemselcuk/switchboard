@@ -2,8 +2,14 @@ import { fileURLToPath } from 'node:url';
 
 import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
+import { sql } from 'kysely';
 import { openDatabase } from './db.js';
-import { ERROR_CODES, normalizeError, sendError } from './errors.js';
+import {
+  AppError,
+  ERROR_CODES,
+  normalizeError,
+  sendError,
+} from './errors.js';
 import { createRepository } from './flags/repository.js';
 import { evaluateRoutes } from './flags/evaluate-routes.js';
 import { flagRoutes } from './flags/routes.js';
@@ -109,6 +115,27 @@ export function buildApp({
   ));
 
   app.get('/healthz', async () => ({ status: 'ok' }));
+
+  app.get('/readyz', async () => {
+    try {
+      if (v2) {
+        await sql`select 1`.execute(v2.db);
+      } else if (db) {
+        db.prepare('SELECT 1').get();
+      }
+    } catch (error) {
+      const readinessError = new AppError(
+        503,
+        ERROR_CODES.EVALUATION_UNAVAILABLE,
+        'Flag storage is unavailable',
+      );
+      readinessError.cause = error;
+
+      throw readinessError;
+    }
+
+    return { status: 'ready' };
+  });
 
   app.register(flagRoutes, { adminToken });
   app.register(evaluateRoutes);
