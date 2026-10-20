@@ -1,15 +1,15 @@
-# Görev Brief'leri
+# Task Briefs
 
-Bu klasör, subagent'lara verilen kısa ve kendi kendine yeterli görev
-brief'lerini içerir. Kalıcı bilgi `docs/PLAN.md` ve `docs/DECISIONS.md`'de
-tutulur; buradaki dosyalar görev tamamlanınca arşiv niteliğindedir.
+This folder contains the short, self-contained task briefs given to subagents.
+Durable information lives in `docs/PLAN.md` and `docs/DECISIONS.md`; the files
+here are archival once the task is complete.
 
-Her brief şunları içermelidir:
+Each brief must include:
 
-- Görev kimliği ve hedefi.
-- Değiştirilecek dosyalar / dokunulmayacak alanlar.
-- Kabul ölçütleri ve çalıştırılacak komutlar.
-- Beklenen kanıt (test çıktısı, diff, commit).
-- Kapsam dışı maddeler.
+- The task ID and goal.
+- Files to change / areas not to touch.
+- Acceptance criteria and commands to run.
+- Expected evidence (test output, diff, commit).
+- Out-of-scope items.
 
-Brief'ler `docs/tasks/NN-kisa-ad.md` biçiminde adlandırılır.
+Briefs are named `docs/tasks/NN-short-name.md`.

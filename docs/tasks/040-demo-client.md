@@ -1,85 +1,89 @@
-# Görev 040 — Tek sayfalık demo ve örnek istemci
+# Task 040 — Single-page demo and example client
 
-## Hedef
+## Goal
 
-`@fastify/static` ile tek sayfalık demo UI, küçük bir Node örnek istemcisi ve
-tekrarlanabilir bir demo script'i ekle. Docker ve nihai README bu görevin
-kapsamı dışında.
+Add a single-page demo UI with `@fastify/static`, a small Node example client,
+and a reproducible demo script. Docker and the final README are out of scope.
 
-## Mevcut durum
+## Current state
 
-- `buildApp({ dbPath, logger, repository, adminToken })` var.
-- `/healthz`, `/api/flags` (admin), `/api/evaluate` (public) çalışıyor.
-- `@fastify/static` bağımlılığı `package.json` içinde mevcut.
-- `public/` henüz yok.
+- `buildApp({ dbPath, logger, repository, adminToken })` exists.
+- `/healthz`, `/api/flags` (admin), and `/api/evaluate` (public) work.
+- The `@fastify/static` dependency is already in `package.json`.
+- `public/` does not exist yet.
 
-## Dosyalar
+## Files
 
-- `src/app.js` (statik dosya servisi)
-- `public/index.html` (yeni)
-- `public/styles.css` (yeni)
-- `public/app.js` (yeni)
-- `examples/client.mjs` (yeni)
-- `scripts/demo.mjs` (yeni)
-- `test/static.test.js` (yeni)
-- `package.json` (`demo` script'i)
-- `docs/EVIDENCE.md` (gerçek çıktı)
+- `src/app.js` (static file serving)
+- `public/index.html` (new)
+- `public/styles.css` (new)
+- `public/app.js` (new)
+- `examples/client.mjs` (new)
+- `scripts/demo.mjs` (new)
+- `test/static.test.js` (new)
+- `package.json` (`demo` script)
+- `docs/EVIDENCE.md` (real output)
 
-## Demo UI gereksinimleri
+## Demo UI requirements
 
-Tek sayfa, framework yok, build adımı yok. `http://localhost:3000/` üzerinden
-servis edilmeli.
+Single page, no framework, no build step. It must be served at
+`http://localhost:3000/`.
 
-### Bölümler
+### Sections
 
-1. **Başlık / durum**
-   - Uygulama adı, kısa açıklama.
-   - `/healthz` durum rozeti.
+1. **Header / status**
+   - App name, short description.
+   - `/healthz` status badge.
 
-2. **Bağlantı**
+2. **Connection**
    - Admin token input (`type="password"`).
-   - Token `sessionStorage`'da tutulur; HTML'e gömülmez.
-   - "Kaydet" butonu; token yoksa admin çağrıları yapılmaz, uyarı gösterilir.
+   - The token is kept in `sessionStorage`; it is not embedded in HTML.
+   - "Save" button; without a token, no admin calls are made and a warning is
+     shown.
 
-3. **Flag oluştur**
+3. **Create flag**
    - `key`, `description`, `enabled` checkbox, `rolloutPercentage` number.
-   - `POST /api/flags`; başarıda liste yenilenir; hata mesajı gösterilir.
+   - `POST /api/flags`; on success the list refreshes; an error message is
+     shown.
 
-4. **Flag listesi**
-   - Her flag için key, description, enabled toggle, rollout slider/number,
-     "Kaydet" butonu.
+4. **Flag list**
+   - For each flag: key, description, enabled toggle, rollout slider/number,
+     "Save" button.
    - `PATCH /api/flags/:key`.
-   - Rollout 0–100 arası; kaydetmeden önce client-side doğrulama.
+   - Rollout 0–100; client-side validation before saving.
 
-5. **Değerlendir**
-   - Flag seçimi, `userId` input, "Değerlendir" butonu.
-   - `POST /api/evaluate` (token gerekmez).
-   - Sonuç kartı: enabled, reason, bucket, rolloutPercentage.
-   - Son 10 değerlendirme tablosu: zaman, flag, userId, enabled, reason, bucket.
+5. **Evaluate**
+   - Flag selection, `userId` input, "Evaluate" button.
+   - `POST /api/evaluate` (no token required).
+   - Result card: enabled, reason, bucket, rolloutPercentage.
+   - Last 10 evaluations table: time, flag, userId, enabled, reason, bucket.
 
-6. **20 → 40 karşılaştırma paneli**
-   - Seçili flag için 12 sabit demo kullanıcısı (bucket dağılımı için
-     seçilmiş ID'ler; `public/app.js` ve `scripts/demo.mjs` ile aynı liste).
-   - Önce `PATCH` ile rollout 20, kullanıcıları değerlendir.
-   - Sonra `PATCH` ile rollout 40, aynı kullanıcıları değerlendir.
-   - Tablo: userId, bucket, 20% sonucu, 40% sonucu, "korundu" / "yeni açıldı".
-   - Flag kapalıysa panel "Flag kapalı; önce açın" mesajı göstersin.
-   - Panel sonunda flag 40% açık kalabilir; bu demo davranışı README'de belirtilir.
+6. **20 → 40 comparison panel**
+   - 12 fixed demo users for the selected flag (IDs chosen for bucket
+     distribution; same list as `public/app.js` and `scripts/demo.mjs`).
+   - First set rollout to 20 with `PATCH`, evaluate the users.
+   - Then set rollout to 40 with `PATCH`, evaluate the same users.
+   - Table: userId, bucket, 20% result, 40% result, "preserved" / "newly
+     opened".
+   - If the flag is off, the panel shows the message "Flag off; turn it on
+     first".
+   - The panel may leave the flag on at 40% at the end; this demo behavior is
+     stated in the README.
 
-### UI kalitesi
+### UI quality
 
 - Vanilla JS; `fetch`; `async/await`.
-- Kullanıcı verisi `textContent` ile basılır; `innerHTML` ile kullanıcı verisi
-  enjekte edilmez.
-- Hata mesajları görünür ve Türkçe.
-- 401 → "Admin token geçersiz"; 503 → "Servis geçici olarak kullanılamıyor".
-- Basit responsive grid; erişilebilir label/button.
-- Dark/light tercihi opsiyonel; kapsamı büyütme.
+- User data is rendered with `textContent`; user data is not injected with
+  `innerHTML`.
+- Error messages are visible and in Turkish.
+- 401 → "Admin token invalid"; 503 → "Service temporarily unavailable".
+- Simple responsive grid; accessible labels/buttons.
+- Dark/light preference is optional; do not expand scope.
 
-## Örnek istemci — `examples/client.mjs`
+## Example client — `examples/client.mjs`
 
-- Node 22 `fetch`; ek bağımlılık yok.
-- Kullanım:
+- Node 22 `fetch`; no extra dependencies.
+- Usage:
 
 ```bash
 node examples/client.mjs \
@@ -88,49 +92,52 @@ node examples/client.mjs \
   --users user-0000,user-0005,user-123
 ```
 
-- `SWITCHBOARD_URL`, `SWITCHBOARD_FLAG`, `SWITCHBOARD_USERS` env alternatifi.
-- Her kullanıcı için `POST /api/evaluate`; sonuçları JSON satırı veya okunabilir
-  tablo olarak yazdır.
-- 503 → her kullanıcı için `enabled:false` fallback ve
-  `reason:"EVALUATION_UNAVAILABLE_FALLBACK"` logla; exit code `2`.
-- Diğer HTTP/network hataları → açık hata mesajı; exit code `1`.
-- `--help` desteği.
+- `SWITCHBOARD_URL`, `SWITCHBOARD_FLAG`, `SWITCHBOARD_USERS` environment
+  alternatives.
+- `POST /api/evaluate` for each user; print the results as JSON lines or a
+  readable table.
+- 503 → `enabled:false` fallback for each user and log
+  `reason:"EVALUATION_UNAVAILABLE_FALLBACK"`; exit code `2`.
+- Other HTTP/network errors → clear error message; exit code `1`.
+- `--help` support.
 
 ## Demo script — `scripts/demo.mjs`
 
-- `ADMIN_TOKEN` (varsayılan `dev-token-change-me`) ve `BASE_URL`
-  (varsayılan `http://127.0.0.1:3000`).
-- `demo-checkout` flag'ini oluşturur; varsa günceller.
-- 12 sabit kullanıcıyı önce `%20`, sonra `%40` ile değerlendirir.
-- Tablo: userId, bucket, 20%, 40%, korundu/yeni.
-- Özet: kaç kullanıcı 20'de açık, kaçı 40'ta açık, kaçı korundu.
-- Hata durumunda net mesaj ve exit code 1.
-- `package.json` içine `"demo": "node scripts/demo.mjs"` ekle.
+- `ADMIN_TOKEN` (default `dev-token-change-me`) and `BASE_URL` (default
+  `http://127.0.0.1:3000`).
+- Creates the `demo-checkout` flag; updates it if it already exists.
+- Evaluates 12 fixed users first at `%20`, then at `%40`.
+- Table: userId, bucket, 20%, 40%, preserved/new.
+- Summary: how many users are included at 20, how many at 40, how many were
+  preserved.
+- Clear message and exit code 1 on error.
+- Add `"demo": "node scripts/demo.mjs"` to `package.json`.
 
-## Testler
+## Tests
 
 `test/static.test.js`:
 
-- `GET /` → 200, `text/html`, içinde `Switchboard` geçer.
-- `GET /app.js` → 200, JavaScript içerik.
-- `GET /styles.css` → 200, CSS içerik.
-- Bilinmeyen `/api/...` hâlâ JSON `NOT_FOUND` zarfı döner.
+- `GET /` → 200, `text/html`, contains `Switchboard`.
+- `GET /app.js` → 200, JavaScript content.
+- `GET /styles.css` → 200, CSS content.
+- Unknown `/api/...` still returns the JSON `NOT_FOUND` envelope.
 
-Ek olarak gerçek sunucu üzerinde manuel:
-- `npm start` ile demo sayfası açılır.
-- `node examples/client.mjs ...` çalışır.
-- `npm run demo` 20→40 tablosunu basar.
+Additionally, manual checks against a real server:
+- The demo page opens with `npm start`.
+- `node examples/client.mjs ...` works.
+- `npm run demo` prints the 20→40 table.
 
-## Kabul ölçütleri
+## Acceptance criteria
 
-- `npm test` yeşil; statik testler dahil.
-- Demo sayfası token olmadan admin çağrısı yapmaz; token HTML'de yok.
-- `npm run demo` gerçek çıktı üretir; çıktı `EVIDENCE.md`'ye eklenir.
-- `examples/client.mjs --help` çalışır; örnek çıktı `EVIDENCE.md`'de.
-- `git diff` odaklı; commit at, push atma.
-- Commit mesajı: `feat: add demo UI and example client`.
+- `npm test` green; static tests included.
+- The demo page makes no admin calls without a token; the token is not in the
+  HTML.
+- `npm run demo` produces real output; the output is added to `EVIDENCE.md`.
+- `examples/client.mjs --help` works; example output is in `EVIDENCE.md`.
+- Focused `git diff`; commit, do not push.
+- Commit message: `feat: add demo UI and example client`.
 
-## Kapsam dışı
+## Out of scope
 
-Docker, nihai README, video, yeni API endpoint'i, framework/build adımı,
-kullanıcı hesapları, rate limiting.
+Docker, final README, video, a new API endpoint, framework/build step, user
+accounts, rate limiting.

@@ -1,28 +1,28 @@
-# Görev 010 — Depolama çekirdeği
+# Task 010 — Storage core
 
-## Hedef
+## Goal
 
-SQLite şemasını, flag repository'sini ve test edilebilir `buildApp()` iskeletini
-ekle. Henüz HTTP route, auth, evaluator veya demo ekleme.
+Add the SQLite schema, the flag repository, and a testable `buildApp()` skeleton.
+Do not add HTTP routes, auth, the evaluator, or the demo yet.
 
-## Dosyalar
+## Files
 
-- `src/db.js` (yeni)
-- `src/flags/repository.js` (yeni)
-- `src/app.js` (güncelle)
-- `src/server.js` (güncelle)
-- `test/repository.test.js` (yeni)
-- `test/health.test.js` (gerekirse güncelle)
+- `src/db.js` (new)
+- `src/flags/repository.js` (new)
+- `src/app.js` (update)
+- `src/server.js` (update)
+- `test/repository.test.js` (new)
+- `test/health.test.js` (update if needed)
 
-## Gereksinimler
+## Requirements
 
 ### `src/db.js`
 
-- `openDatabase({ dbPath = ':memory:' })` benzeri bir fonksiyon.
-- `dbPath` bir dosya yoluysa üst dizini oluştur.
-- `PRAGMA journal_mode = WAL` (dosya DB'sinde), `foreign_keys = ON`,
+- A function such as `openDatabase({ dbPath = ':memory:' })`.
+- If `dbPath` is a file path, create its parent directory.
+- `PRAGMA journal_mode = WAL` (for a file DB), `foreign_keys = ON`,
   `busy_timeout = 5000`.
-- `flags` tablosu:
+- `flags` table:
   - `id INTEGER PRIMARY KEY AUTOINCREMENT`
   - `key TEXT NOT NULL UNIQUE`
   - `description TEXT NOT NULL DEFAULT ''`
@@ -30,45 +30,47 @@ ekle. Henüz HTTP route, auth, evaluator veya demo ekleme.
   - `rollout_percentage INTEGER NOT NULL DEFAULT 0 CHECK (rollout_percentage BETWEEN 0 AND 100)`
   - `created_at TEXT NOT NULL`
   - `updated_at TEXT NOT NULL`
-- Şema idempotent olmalı (`CREATE TABLE IF NOT EXISTS`).
+- The schema must be idempotent (`CREATE TABLE IF NOT EXISTS`).
 - `PRAGMA user_version = 1`.
-- `close()` veya `db.close()` ile kapanabilmeli.
+- Must be closable via `close()` or `db.close()`.
 
 ### `src/flags/repository.js`
 
 - `createFlag({ key, description, enabled, rolloutPercentage })`
 - `listFlags()`
 - `getFlag(key)`
-- `updateFlag(key, patch)` — yalnızca verilen alanları günceller.
-- Dönüş nesneleri camelCase: `{ id, key, description, enabled, rolloutPercentage, createdAt, updatedAt }`.
-- `enabled` boolean olarak dönmeli.
-- Duplicate key ve bulunamayan kayıt için anlamlı hata sınıfları/fırlatmalar
-  kullan. Route katmanı bunları HTTP'ye çevirecek; bu görevde route yok.
-- SQL yalnızca bu dosyada ve `src/db.js` içinde.
+- `updateFlag(key, patch)` — updates only the provided fields.
+- Return objects are camelCase: `{ id, key, description, enabled, rolloutPercentage, createdAt, updatedAt }`.
+- `enabled` must be returned as a boolean.
+- Use meaningful error classes/throws for a duplicate key and a missing record.
+  The route layer will map these to HTTP; there are no routes in this task.
+- SQL only in this file and `src/db.js`.
 
 ### `src/app.js`
 
 - `buildApp({ dbPath = ':memory:', logger = false, repository } = {})`.
-- DB/repository'yi app'e bağla; `app.close()` DB'yi kapatsın.
-- `/healthz` mevcut davranışını korusun.
-- Test için `repository` enjeksiyonu mümkün olsun (ileride DB hatası testi için).
-- Logger'da `authorization` header'ını redact et (auth henüz yok ama altyapı).
+- Wire the DB/repository into the app; `app.close()` closes the DB.
+- `/healthz` keeps its current behavior.
+- Allow `repository` injection for tests (for a future DB-failure test).
+- Redact the `authorization` header in the logger (auth does not exist yet, but
+  this is the groundwork).
 
 ### `src/server.js`
 
-- `ADMIN_TOKEN` yoksa net mesajla `process.exit(1)`.
-- `PORT`, `HOST`, `DB_PATH`, `LOG_LEVEL` ortam değişkenlerini kullan.
-- SIGINT/SIGTERM'de `app.close()` çağır.
+- `process.exit(1)` with a clear message if `ADMIN_TOKEN` is missing.
+- Use the `PORT`, `HOST`, `DB_PATH`, `LOG_LEVEL` environment variables.
+- Call `app.close()` on SIGINT/SIGTERM.
 
-## Kabul ölçütleri
+## Acceptance criteria
 
-- `npm test` yeşil.
-- Repository testleri: create/get/list/update, duplicate, not found, boolean
-  dönüşümü, temp dosya DB'sinde close/reopen sonrası kayıt korunması.
-- `buildApp()` health testi yeşil.
-- `git diff` küçük ve odaklı.
-- Commit at; push atma.
+- `npm test` green.
+- Repository tests: create/get/list/update, duplicate, not found, boolean
+  conversion, record preserved after close/reopen on a temp file DB.
+- `buildApp()` health test green.
+- `git diff` small and focused.
+- Commit; do not push.
 
-## Kapsam dışı
+## Out of scope
 
-HTTP route, auth, evaluator, demo, Docker, doküman değişikliği (gerekmiyorsa).
+HTTP routes, auth, evaluator, demo, Docker, documentation changes (unless
+needed).

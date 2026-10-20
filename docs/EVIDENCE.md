@@ -1,18 +1,21 @@
-# Demo ve Test Kanıtları
+# Demo and Test Evidence
 
-Bu dosya yalnızca gerçekten çalıştırılmış komutların çıktılarını ve demo
-kanıtlarını içerir. Tüm bölümler gerçek çıktılarla doldurulmuştur.
+This file contains only output from commands that were actually run, plus demo
+evidence. All sections are filled with real output.
 
-## Ortam
+> Note: Some transcript labels are in Turkish because the demo UI is Turkish.
+> Literal command output is preserved exactly.
 
-- Tarih: 2026-10-20
-- Makine: macOS (arm64), Node.js 22.23.2, Docker 29.8.1, SQLite 3.51.0
-- Release tag: `v1.0.0` (bu commit)
+## Environment
+
+- Date: 2026-10-20
+- Machine: macOS (arm64), Node.js 22.23.2, Docker 29.8.1, SQLite 3.51.0
+- Release tag: `v1.0.0` (this commit)
 - GitHub: https://github.com/kemselcuk/switchboard
 
-## 1. Otomatik testler
+## 1. Automated tests
 
-İlk depolama çekirdeği testleri (commit `586dfad`):
+Initial storage-core tests (commit `586dfad`):
 
 ```text
 ✔ buildApp accepts an injected repository without opening a database
@@ -33,7 +36,7 @@ kanıtlarını içerir. Tüm bölümler gerçek çıktılarla doldurulmuştur.
 ℹ fail 0
 ```
 
-Yönetim API'si, auth ve hata zarfı testleri (Görev 020):
+Admin API, auth, and error-envelope tests (Task 020):
 
 ```text
 ✔ admin routes reject a request without a token
@@ -65,7 +68,7 @@ Yönetim API'si, auth ve hata zarfı testleri (Görev 020):
 ℹ fail 0
 ```
 
-Deterministik değerlendirme testleri (Görev 030, iki ardışık `npm test`):
+Deterministic evaluation tests (Task 030, two consecutive `npm test` runs):
 
 ```text
 ✔ known flag returns the exact evaluation contract
@@ -90,9 +93,9 @@ Deterministik değerlendirme testleri (Görev 030, iki ardışık `npm test`):
 ℹ fail 0
 ```
 
-İki ardışık `npm test` çalıştırması da aynı sonucu verdi (52/52).
+Both consecutive `npm test` runs produced the same result (52/52).
 
-Geçici DB ile sunucu uçtan uca kontrolü (`PORT=4317`, yerel test token'ı):
+End-to-end server check with a temporary DB (`PORT=4317`, local test token):
 
 ```text
 health: {"status":"ok"}
@@ -105,17 +108,17 @@ patch: 200
 token in log: no
 ```
 
-`ADMIN_TOKEN` olmadan sunucu başlatma kontrolü:
+Server startup check without `ADMIN_TOKEN`:
 
 ```text
 exit=1
 ADMIN_TOKEN is required. Copy .env.example to .env and set a token.
 ```
 
-## 2. Demo UI, örnek istemci ve demo script (Görev 040)
+## 2. Demo UI, example client, and demo script (Task 040)
 
-Statik dosyalar geçici bir veritabanıyla çalışan yerel sunucudan (`PORT=3100`)
-istendi:
+Static files were requested from a local server running with a temporary
+database (`PORT=3100`):
 
 ```text
 HTTP/1.1 200 OK
@@ -126,11 +129,11 @@ api-unknown:404 application/json; charset=utf-8
 {"error":{"code":"NOT_FOUND","message":"Route not found"}}
 ```
 
-`GET /` yanıtında admin token veya varsayılan token değeri yoktur; token
-yalnızca tarayıcıda `sessionStorage` içinde tutulur. Sunucu loglarında da token
-değeri görünmedi (`grep -c 'dev-token-change-me'` → `0`).
+The `GET /` response contains no admin token or default token value; the token
+is held only in `sessionStorage` in the browser. The token value did not appear
+in server logs either (`grep -c 'dev-token-change-me'` → `0`).
 
-Görev 040 sonrası `npm test`:
+`npm test` after Task 040:
 
 ```text
 ✔ GET / serves the single-page demo
@@ -144,7 +147,7 @@ Görev 040 sonrası `npm test`:
 ℹ fail 0
 ```
 
-`npm run demo` (yerel sunucu `http://127.0.0.1:3100`, geçici DB):
+`npm run demo` (local server `http://127.0.0.1:3100`, temporary DB):
 
 ```text
 > switchboard@0.1.0 demo
@@ -173,11 +176,12 @@ demo-user-33  35      kapalı  açık    yeni açıldı
 Demo sonunda flag %40 rollout ile açık bırakıldı.
 ```
 
-Aynı script ikinci kez çalıştırıldığında mevcut `demo-checkout` flag'ini
-`PATCH /api/flags/demo-checkout` ile güncelledi ve aynı sonucu üretti.
+When the same script was run a second time, it updated the existing
+`demo-checkout` flag via `PATCH /api/flags/demo-checkout` and produced the same
+result.
 
-`demo-checkout` flag'i (`enabled=true`, `rolloutPercentage=40`) ile örnek
-istemci:
+Example client with the `demo-checkout` flag (`enabled=true`,
+`rolloutPercentage=40`):
 
 ```text
 $ node examples/client.mjs --url http://127.0.0.1:3100 --flag demo-checkout \
@@ -191,7 +195,7 @@ demo-user-02  false    BUCKET_EXCLUDED  48      40%
 exit=0
 ```
 
-`--help` çıktısı ve çıkış kodu:
+`--help` output and exit code:
 
 ```text
 $ node examples/client.mjs --help
@@ -216,7 +220,7 @@ Ortam değişkenleri:
 exit=0
 ```
 
-503 döndüren yerel bir mock sunucuya karşı fallback davranışı:
+Fallback behavior against a local mock server returning 503:
 
 ```text
 $ node examples/client.mjs --url http://127.0.0.1:4320 --flag demo-checkout \
@@ -232,7 +236,7 @@ Servis geçici olarak kullanılamıyor; fallback sonuçları gösterildi.
 exit=2
 ```
 
-Ulaşılamayan sunucu için çıkış kodu `1`:
+Exit code `1` for an unreachable server:
 
 ```text
 $ node examples/client.mjs --url http://127.0.0.1:4399 --flag demo-checkout \
@@ -242,17 +246,17 @@ Hata: http://127.0.0.1:4399 adresine ulaşılamadı: fetch failed
 exit=1
 ```
 
-Not: 12 demo kullanıcısı, `demo-checkout` için 4/4/4 dağılımı verecek şekilde
-seçildi: %20'de 4 açık, %40'ta 8 açık (4'ü korundu, 4'ü yeni açıldı), 4'ü
-kapalı. Bucket'lar 4, 48, 70, 67, 93, 17, 37, 28, 15, 21, 3 ve 35'tir.
-Küçük örneklemde tam yüzde beklenmez; bu set deterministik bir kanıt için
-kullanılır.
+Note: The 12 demo users were chosen to produce a 4/4/4 split for
+`demo-checkout`: 4 included at %20, 8 included at %40 (4 preserved, 4 newly
+opened), and 4 excluded. The buckets are 4, 48, 70, 67, 93, 17, 37, 28, 15, 21,
+3, and 35. Exact percentages are not expected in a small sample; this set is
+used for deterministic evidence.
 
-## 3. Determinizm ve monotonluk
+## 3. Determinism and monotonicity
 
-`demo-checkout` flag'i önce `%20`, sonra `%40` yapıldı. Aynı kullanıcıların
-bucket'ları değişmedi; `%20`'de açık olan kullanıcı `%40`'ta da açık kaldı,
-`%20`'de kapalı olan bir kullanıcı `%40`'ta açıldı:
+The `demo-checkout` flag was first set to `%20`, then `%40`. The same users'
+buckets did not change; a user included at `%20` stayed included at `%40`, and a
+user excluded at `%20` was included at `%40`:
 
 ```text
 --- at20 user01
@@ -265,12 +269,12 @@ bucket'ları değişmedi; `%20`'de açık olan kullanıcı `%40`'ta da açık ka
 {"flagKey":"demo-checkout","userId":"demo-user-14","enabled":true,"reason":"BUCKET_INCLUDED","bucket":37,"rolloutPercentage":40}
 ```
 
-`bucket` değerleri `4` ve `37` olarak sabit kaldı. `%20 → %40` geçişi
-yeniden hash yapmadı; yalnızca eşik değişti.
+The `bucket` values remained fixed at `4` and `37`. The `%20 → %40` move did not
+re-hash; only the threshold changed.
 
-## 4. API sözleşmesi
+## 4. API contract
 
-Gerçek `curl` yanıtları (`demo-checkout`, `%40`):
+Real `curl` responses (`demo-checkout`, `%40`):
 
 ```text
 $ curl -sS http://127.0.0.1:3100/healthz
@@ -297,7 +301,7 @@ $ curl -sS http://127.0.0.1:3100/api/flags
 status=401
 ```
 
-Yönetim çağrısı örneği:
+Example admin call:
 
 ```text
 $ curl -sS -H 'Authorization: Bearer dev-token-change-me' \
@@ -305,10 +309,10 @@ $ curl -sS -H 'Authorization: Bearer dev-token-change-me' \
 {"id":1,"key":"demo-checkout","description":"Demo: 20 → 40 rollout karşılaştırması","enabled":true,"rolloutPercentage":40,"createdAt":"2026-10-20T14:17:56.611Z","updatedAt":"2026-10-20T14:24:29.353Z"}
 ```
 
-## 5. Yeniden başlatma / kalıcılık
+## 5. Restart / persistence
 
-`npm run smoke` içindeki restart adımı; flag ayarı ve aynı kullanıcı sonucu
-korunuyor:
+The restart step in `npm run smoke`; flag settings and the same user's result
+are preserved:
 
 ```text
 == 6. Restart and re-evaluate ==
@@ -325,7 +329,7 @@ OK: restart.enabled = false
 OK: restart.reason = BUCKET_EXCLUDED
 ```
 
-`down` (volume korunur) + `up -d` sonrası aynı sonuç:
+Same result after `down` (volume kept) + `up -d`:
 
 ```text
 $ docker compose -p switchboard-smoke down
@@ -352,10 +356,11 @@ OK: down-up.enabled = false
 OK: down-up.reason = BUCKET_EXCLUDED
 ```
 
-## 6. Docker smoke testi
+## 6. Docker smoke test
 
-`npm run smoke` (temiz `down -v`, build, health, flag, restart, down/up ve
-tekrar `down -v`). Build katman logları kısaltıldı; uygulama çıktısı birebir:
+`npm run smoke` (clean `down -v`, build, health, flag, restart, down/up, and
+`down -v` again). Build layer logs were shortened; application output is
+verbatim:
 
 ```text
 > switchboard@0.1.0 smoke
@@ -448,7 +453,7 @@ $ docker compose -p switchboard-smoke down -v
  Network switchboard-smoke_default Removed
 ```
 
-Healthcheck ve non-root kullanıcı:
+Healthcheck and non-root user:
 
 ```text
 $ docker compose -p switchboard-smoke ps
@@ -460,7 +465,7 @@ $ docker image inspect switchboard-smoke-switchboard --format '{{.Config.User}}'
 node
 ```
 
-`ADMIN_TOKEN` verilmeden compose net hata veriyor (gizli varsayılan token yok):
+Compose fails clearly without `ADMIN_TOKEN` (there is no hidden default token):
 
 ```text
 $ env -u ADMIN_TOKEN docker compose --env-file /dev/null config
@@ -468,7 +473,8 @@ error while interpolating services.switchboard.environment.ADMIN_TOKEN: required
 exit=1
 ```
 
-`down -v` sonrası volume kalmadı ve yeni başlangıç boş veritabanıyla açıldı:
+After `down -v` no volume remained, and the fresh start opened an empty
+database:
 
 ```text
 $ docker volume ls --filter name=switchboard-smoke
@@ -479,22 +485,22 @@ $ curl -s -H 'Authorization: Bearer smoke-token' http://127.0.0.1:3101/api/flags
 
 ## 7. Demo video
 
-- Dosya: [`demo/switchboard-demo.mp4`](../demo/switchboard-demo.mp4)
-- Süre: 62,68 saniye
-- Format: 1280×720, H.264, sessiz
-- Kayıt komutu: `npm run record:demo`
-- Gösterilen akış:
-  1. Servis sağlığı ve admin token ile bağlantı.
-  2. `demo-checkout` flag'inin `%20` rollout ile oluşturulması.
-  3. `demo-user-01` için aynı bucket/sonuç.
-  4. `demo-user-14` için `%20`'de kapalı sonuç.
-  5. `%20 → %40` karşılaştırması: 4/12 açık → 8/12 açık, 4 korundu,
-     4 yeni açıldı.
-  6. Sunucu süreci yeniden başlatıldıktan sonra aynı kullanıcı için
-     `bucket 4 → 4`, durum `Açık → Açık`.
+- File: [`demo/switchboard-demo.mp4`](../demo/switchboard-demo.mp4)
+- Duration: 62.68 seconds
+- Format: 1280×720, H.264, silent
+- Recording command: `npm run record:demo`
+- Flow shown:
+  1. Service health and connecting with the admin token.
+  2. Creating the `demo-checkout` flag with a `%20` rollout.
+  3. Same bucket/result for `demo-user-01`.
+  4. Excluded result at `%20` for `demo-user-14`.
+  5. `%20 → %40` comparison: 4/12 included → 8/12 included, 4 preserved,
+     4 newly opened.
+  6. After the server process restarts, `bucket 4 → 4` and status
+     `Açık → Açık` for the same user.
   7. `npm test`: 58/58 pass.
 
-## 8. Git kanıtı
+## 8. Git evidence
 
 ```text
 $ git log --oneline -12
@@ -522,4 +528,4 @@ $ git status --short
 (boş)
 ```
 
-Release tag: `v1.0.0` (bu commit).
+Release tag: `v1.0.0` (this commit).

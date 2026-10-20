@@ -1,36 +1,36 @@
-# Görev 020 — Yönetim API'si, auth ve hata zarfı
+# Task 020 — Admin API, auth, and error envelope
 
-## Hedef
+## Goal
 
-Flag CRUD uçlarını, Bearer token korumasını ve tutarlı hata zarfını ekle.
-Evaluator, demo ve Docker bu görevin kapsamı dışında.
+Add flag CRUD endpoints, Bearer token protection, and a consistent error
+envelope. The evaluator, demo, and Docker are out of scope for this task.
 
-## Mevcut durum
+## Current state
 
-- `src/db.js` ve `src/flags/repository.js` hazır.
-- `buildApp({ dbPath, logger, repository })` mevcut; `/healthz` var.
-- Repository hata sınıfları: `FlagExistsError` (`FLAG_EXISTS`),
+- `src/db.js` and `src/flags/repository.js` are ready.
+- `buildApp({ dbPath, logger, repository })` exists; `/healthz` is available.
+- Repository error classes: `FlagExistsError` (`FLAG_EXISTS`),
   `FlagNotFoundError` (`FLAG_NOT_FOUND`).
-- `src/server.js` `ADMIN_TOKEN` yokluğunu kontrol ediyor ama henüz
-  `buildApp`'e geçirmiyor.
+- `src/server.js` checks for a missing `ADMIN_TOKEN` but does not pass it to
+  `buildApp` yet.
 
-## Dosyalar
+## Files
 
-- `src/errors.js` (yeni)
-- `src/auth.js` (yeni)
-- `src/flags/schemas.js` (yeni)
-- `src/flags/routes.js` (yeni)
-- `src/app.js` (güncelle)
-- `src/server.js` (güncelle)
-- `test/auth.api.test.js` (yeni)
-- `test/flags.api.test.js` (yeni)
-- `test/health.test.js` (gerekirse güncelle)
+- `src/errors.js` (new)
+- `src/auth.js` (new)
+- `src/flags/schemas.js` (new)
+- `src/flags/routes.js` (new)
+- `src/app.js` (update)
+- `src/server.js` (update)
+- `test/auth.api.test.js` (new)
+- `test/flags.api.test.js` (new)
+- `test/health.test.js` (update if needed)
 
 ## API
 
 ### `POST /api/flags` (admin)
 
-Gövde:
+Body:
 
 ```json
 {
@@ -41,69 +41,69 @@ Gövde:
 }
 ```
 
-- `key` zorunlu; `^[a-z0-9][a-z0-9._-]{0,63}$`.
-- `description` opsiyonel, max 280, varsayılan `''`.
-- `enabled` opsiyonel boolean, varsayılan `false`.
-- `rolloutPercentage` opsiyonel integer 0–100, varsayılan `0`.
-- Başarı: `201` + flag.
+- `key` is required; `^[a-z0-9][a-z0-9._-]{0,63}$`.
+- `description` is optional, max 280, default `''`.
+- `enabled` is an optional boolean, default `false`.
+- `rolloutPercentage` is an optional integer 0–100, default `0`.
+- Success: `201` + flag.
 - Duplicate: `409` + `FLAG_EXISTS`.
-- Geçersiz gövde: `400` + `VALIDATION_ERROR`.
+- Invalid body: `400` + `VALIDATION_ERROR`.
 
 ### `GET /api/flags` (admin)
 
-- Başarı: `200 { "flags": [...] }`.
+- Success: `200 { "flags": [...] }`.
 
 ### `GET /api/flags/:key` (admin)
 
-- Başarı: `200` + flag.
-- Yoksa: `404` + `FLAG_NOT_FOUND`.
+- Success: `200` + flag.
+- Missing: `404` + `FLAG_NOT_FOUND`.
 
 ### `PATCH /api/flags/:key` (admin)
 
-- Gövde en az bir alan: `description`, `enabled`, `rolloutPercentage`.
-- Bilinmeyen alan: `400`.
-- Boş gövde: `400`.
-- Başarı: `200` + güncel flag.
-- Yoksa: `404` + `FLAG_NOT_FOUND`.
+- Body with at least one field: `description`, `enabled`, `rolloutPercentage`.
+- Unknown field: `400`.
+- Empty body: `400`.
+- Success: `200` + updated flag.
+- Missing: `404` + `FLAG_NOT_FOUND`.
 
-`DELETE` ve rename yok.
+There is no `DELETE` and no rename.
 
 ## Auth
 
-- `ADMIN_TOKEN` ortam değişkeni; `Authorization: Bearer <token>`.
-- Karşılaştırma sabit zamanlı olmalı. Token'ları SHA-256 ile hash'leyip
-  `timingSafeEqual` kullanmak serbest; uzunluk farkı hata fırlatmamalı.
-- Eksik/yanlış token: `401` + `UNAUTHORIZED`; `WWW-Authenticate: Bearer`.
-- `/healthz` public kalır; `/api/evaluate` bu görevde yok.
-- Token hiçbir log veya hata yanıtında görünmemeli.
+- `ADMIN_TOKEN` environment variable; `Authorization: Bearer <token>`.
+- Comparison must be constant-time. Hashing tokens with SHA-256 and using
+  `timingSafeEqual` is allowed; a length mismatch must not throw.
+- Missing/wrong token: `401` + `UNAUTHORIZED`; `WWW-Authenticate: Bearer`.
+- `/healthz` stays public; `/api/evaluate` does not exist in this task.
+- The token must never appear in any log or error response.
 
-## Hata zarfı
+## Error envelope
 
-Tüm hatalar:
+All errors:
 
 ```json
 { "error": { "code": "VALIDATION_ERROR", "message": "..." } }
 ```
 
 - Fastify validation → `400` + `VALIDATION_ERROR`.
-- Bilinmeyen route → `404` + `NOT_FOUND`.
-- Beklenmeyen hata → `500` + `INTERNAL_ERROR`, mesaj
-  `"Internal server error"`; stack trace yok.
-- `SQLITE_` ile başlayan hatalar → `503` + `EVALUATION_UNAVAILABLE`
-  (ileride evaluate için de kullanılacak; admin route'larda da tutarlı).
+- Unknown route → `404` + `NOT_FOUND`.
+- Unexpected error → `500` + `INTERNAL_ERROR`, message
+  `"Internal server error"`; no stack trace.
+- Errors starting with `SQLITE_` → `503` + `EVALUATION_UNAVAILABLE`
+  (also used for evaluate later; consistent on admin routes too).
 - `FlagExistsError` → `409`; `FlagNotFoundError` → `404`.
 
-## Kabul ölçütleri
+## Acceptance criteria
 
-- `npm test` yeşil.
-- Auth testleri: token yok/yanlış/doğru; health public.
-- CRUD testleri: create/list/get/patch; duplicate; invalid key; invalid
-  rollout; boş patch; bilinmeyen alan; unknown key.
-- Response şemaları planlanan alanlarla birebir.
-- Hata yanıtlarında stack trace/token yok.
-- `git diff` odaklı; commit at, push atma.
+- `npm test` green.
+- Auth tests: missing/wrong/correct token; health public.
+- CRUD tests: create/list/get/patch; duplicate; invalid key; invalid rollout;
+  empty patch; unknown field; unknown key.
+- Response schemas match the planned fields exactly.
+- No stack trace/token in error responses.
+- Focused `git diff`; commit, do not push.
 
-## Kapsam dışı
+## Out of scope
 
 Evaluator, `/api/evaluate`, demo UI, Docker, rate limiting, CORS, audit log,
-delete/rename, kullanıcı hesapları.
+delete/rename, user accounts.

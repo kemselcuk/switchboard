@@ -1,38 +1,39 @@
-# Switchboard — Uygulama Planı
+# Switchboard — Implementation Plan
 
-Bu belge, onaylanan yaklaşımın ayrıntılı uygulama planıdır. Kodlama, bu planın
-onaylanmasından sonra küçük görevler halinde ilerler.
+This document is the detailed implementation plan for the approved approach.
+Coding proceeds in small tasks after this plan is approved.
 
-## 1. Ürün kapsamı
+## 1. Product scope
 
-Switchboard küçük bir feature flag servisidir:
+Switchboard is a small feature flag service:
 
-- Boolean flag oluşturma ve güncelleme.
-- Flag'i tamamen açma/kapatma veya kullanıcıların belirli bir yüzdesine açma.
-- `flagKey` + `userId` ile deterministik değerlendirme.
-- Aynı ayarlarda aynı kullanıcı için her zaman aynı sonuç.
-- SQLite ile yeniden başlatma sonrası kalıcılık.
+- Create and update boolean flags.
+- Turn a flag fully on/off or expose it to a percentage of users.
+- Deterministic evaluation by `flagKey` + `userId`.
+- The same settings always produce the same result for the same user.
+- Persistence across restarts with SQLite.
 
-Kapsam dışı: özel kural dili, segmentler, A/B analizi, kullanıcı hesapları,
-RBAC, audit log, çoklu ortam, SDK'lar, rate limiting, cache, multi-instance,
-Postgres, cloud deploy, flag ile yetkilendirme, flag silme/rename.
+Out of scope: custom rule language, segments, A/B analysis, user accounts,
+RBAC, audit log, multiple environments, SDKs, rate limiting, caching,
+multi-instance, Postgres, cloud deployment, authorization via flags, flag
+deletion/renaming.
 
-## 2. Onaylanan kararlar
+## 2. Approved decisions
 
-| Konu | Karar |
+| Topic | Decision |
 |---|---|
-| Değerlendirme sözleşmesi | `200` + `flagKey, userId, enabled, reason, bucket, rolloutPercentage`; geçersiz girdi `400`; bilinmeyen flag `200` + `FLAG_NOT_FOUND` |
-| Hata/kesinti | DB hatası `503` + `EVALUATION_UNAVAILABLE`; sessiz fail-open yok |
-| Yönetim | `ADMIN_TOKEN` + `Authorization: Bearer`; evaluate/health public |
-| Demo | 1–2 dk sessiz video + ekran üstü kısa açıklamalar + README kanıtları |
-| Öğrenme | Her kilometre taşında 5–10 dk Türkçe karar/trade-off anlatımı |
-| Doküman | README + `docs/PLAN.md`, `DECISIONS.md`, `EVIDENCE.md` + kısa görev brief'leri |
-| Subagent | 3 rol, aynı anda en fazla 2; implementer + taze bağlamlı verifier + docs/demo |
-| Model | DeepSeek V4.1 Flash `max`; coding ve testler bu modelde |
-| Bütçe | Mevcut Go aboneliği, ek model bütçesi €0; ek altyapı €0 |
-| Git | Her yeşil ve anlamlı görevde commit + push |
+| Evaluation contract | `200` + `flagKey, userId, enabled, reason, bucket, rolloutPercentage`; invalid input `400`; unknown flag `200` + `FLAG_NOT_FOUND` |
+| Errors/outage | DB failure `503` + `EVALUATION_UNAVAILABLE`; no silent fail-open |
+| Admin | `ADMIN_TOKEN` + `Authorization: Bearer`; evaluate/health public |
+| Demo | 1–2 min silent video + short on-screen captions + README evidence |
+| Learning | 5–10 min walkthrough in Turkish of decisions and trade-offs at each milestone |
+| Documentation | README + `docs/PLAN.md`, `DECISIONS.md`, `EVIDENCE.md` + short task briefs |
+| Subagents | 3 roles, at most 2 at a time; implementer + fresh-context verifier + docs/demo |
+| Model | DeepSeek V4.1 Flash `max`; coding and tests on this model |
+| Budget | Existing Go subscription, additional model budget €0; additional infrastructure €0 |
+| Git | Commit + push on every green, meaningful task |
 
-## 3. Mimari
+## 3. Architecture
 
 **Stack:** Node.js 22+, ESM, Fastify 5, `better-sqlite3`, `@fastify/static`,
 `node:test`.
@@ -70,9 +71,9 @@ docs/
   tasks/
 ```
 
-**Veri modeli — `flags`:**
+**Data model — `flags`:**
 
-| Alan | Tip / kural |
+| Field | Type / rule |
 |---|---|
 | `id` | INTEGER PRIMARY KEY AUTOINCREMENT |
 | `key` | TEXT NOT NULL UNIQUE, immutable, `^[a-z0-9][a-z0-9._-]{0,63}$` |
@@ -81,21 +82,21 @@ docs/
 | `rollout_percentage` | INTEGER NOT NULL DEFAULT 0, CHECK 0–100 |
 | `created_at`, `updated_at` | TEXT NOT NULL, ISO 8601 |
 
-SQLite ayarları: `journal_mode = WAL`, `foreign_keys = ON`,
+SQLite settings: `journal_mode = WAL`, `foreign_keys = ON`,
 `busy_timeout = 5000`, `user_version = 1`.
 
-## 4. API sözleşmesi
+## 4. API contract
 
-### Yönetim uçları
+### Admin endpoints
 
-| Method | Path | Auth | Başarı |
+| Method | Path | Auth | Success |
 |---|---|---|---|
 | `POST` | `/api/flags` | Bearer | `201` flag |
 | `GET` | `/api/flags` | Bearer | `200 { flags: [...] }` |
-| `GET` | `/api/flags/:key` | Bearer | `200` flag, yoksa `404` |
-| `PATCH` | `/api/flags/:key` | Bearer | `200` güncel flag |
+| `GET` | `/api/flags/:key` | Bearer | `200` flag, otherwise `404` |
+| `PATCH` | `/api/flags/:key` | Bearer | `200` updated flag |
 
-`POST /api/flags` gövdesi:
+`POST /api/flags` body:
 
 ```json
 {
@@ -106,13 +107,13 @@ SQLite ayarları: `journal_mode = WAL`, `foreign_keys = ON`,
 }
 ```
 
-`PATCH /api/flags/:key` gövdesi (en az bir alan):
+`PATCH /api/flags/:key` body (at least one field):
 
 ```json
 { "enabled": true, "rolloutPercentage": 40 }
 ```
 
-### Değerlendirme
+### Evaluation
 
 `POST /api/evaluate` (public):
 
@@ -120,7 +121,7 @@ SQLite ayarları: `journal_mode = WAL`, `foreign_keys = ON`,
 { "flagKey": "new-checkout", "userId": "user-123" }
 ```
 
-Bilinen flag:
+Known flag:
 
 ```json
 {
@@ -133,7 +134,7 @@ Bilinen flag:
 }
 ```
 
-Bilinmeyen flag:
+Unknown flag:
 
 ```json
 {
@@ -146,19 +147,19 @@ Bilinmeyen flag:
 }
 ```
 
-Reason değerleri: `FLAG_DISABLED`, `FLAG_NOT_FOUND`, `BUCKET_INCLUDED`,
+Reason values: `FLAG_DISABLED`, `FLAG_NOT_FOUND`, `BUCKET_INCLUDED`,
 `BUCKET_EXCLUDED`.
 
-### Hata zarfı
+### Error envelope
 
 ```json
 { "error": { "code": "VALIDATION_ERROR", "message": "..." } }
 ```
 
-Kodlar: `UNAUTHORIZED`, `VALIDATION_ERROR`, `FLAG_EXISTS`, `FLAG_NOT_FOUND`,
+Codes: `UNAUTHORIZED`, `VALIDATION_ERROR`, `FLAG_EXISTS`, `FLAG_NOT_FOUND`,
 `EVALUATION_UNAVAILABLE`, `NOT_FOUND`, `INTERNAL_ERROR`.
 
-## 5. Deterministik algoritma
+## 5. Deterministic algorithm
 
 ```text
 u32    = SHA-256(flagKey + ":" + userId) ilk 4 byte, big-endian
@@ -166,124 +167,127 @@ bucket = floor((u32 / 2^32) * 100)        // 0–99
 açık   = enabled && bucket < rolloutPercentage
 ```
 
-- `flagKey` immutable; rename yok.
-- Yüzde değişince yeniden hash yok. `%20 → %40` geçişinde eski açık küme
-  korunur.
-- `userId` opak ve case-sensitive; normalize edilmez. İstemci stabil ID
-  göndermekle yükümlü.
-- `BUCKET_ALGORITHM_VERSION = 1` kodda sabittir. Algoritma değişirse gruplar
-  yeniden dağılır; README'de uyarı bulunur.
-- Küçük örneklemde tam yüzde beklenmez; testler küme içermesi ve determinizm
-  üzerinden yazılır.
+- `flagKey` is immutable; there is no rename.
+- Changing the percentage does not re-hash users. On a `%20 → %40` move, the
+  previously included set is preserved.
+- `userId` is opaque and case-sensitive; it is not normalized. The client is
+  responsible for sending a stable ID.
+- `BUCKET_ALGORITHM_VERSION = 1` is fixed in code. If the algorithm changes,
+  groups are redistributed; the README carries a warning.
+- Exact percentages are not expected in a small sample; tests assert set
+  inclusion and determinism.
 
-## 6. Aşamalar ve görevler
+## 6. Phases and tasks
 
-> Her görevde kabul: testler yeşil + diff review + commit + push. WIP commit'ler
-> yalnızca kısa ömürlü görev dalında kalır; `main` kırık push edilmez.
+> Acceptance for every task: tests green + diff review + commit + push. WIP
+> commits stay only on the short-lived task branch; broken code is never pushed
+> to `main`.
 
-### Faz 0 — Plan, repo ve iskelet
+### Phase 0 — Plan, repo, and skeleton
 
-| ID | Görev | Kabul ölçütü |
+| ID | Task | Acceptance criterion |
 |---|---|---|
-| 0.1 | Dokümanlar ve `AGENTS.md` | Onaylanan kararlarla tutarlı; komutlar, kapsam ve push kuralı yazılı |
-| 0.2 | Git remote HTTPS + ilk push | `git ls-remote --heads origin` main'i gösterir; repo boş değil |
-| 0.3 | Proje iskeleti + `/healthz` | `npm ci`, `npm test`, `npm start` çalışır; secret yok |
+| 0.1 | Documentation and `AGENTS.md` | Consistent with the approved decisions; commands, scope, and push rule documented |
+| 0.2 | Git remote HTTPS + first push | `git ls-remote --heads origin` shows main; repo is not empty |
+| 0.3 | Project skeleton + `/healthz` | `npm ci`, `npm test`, `npm start` work; no secrets |
 
-### Faz 1 — Veri ve servis çekirdeği
+### Phase 1 — Data and service core
 
-| ID | Görev | Kabul ölçütü |
+| ID | Task | Acceptance criterion |
 |---|---|---|
-| 1.1 | SQLite şeması | Idempotent; constraint'ler; yeniden açılışta veri durur |
-| 1.2 | Repository | CRUD testleri; kalıcılık; route içinde SQL yok |
-| 1.3 | `buildApp()` + health + shutdown | Health 200; env doğrulama; SIGTERM'de DB kapanır |
+| 1.1 | SQLite schema | Idempotent; constraints; data survives reopen |
+| 1.2 | Repository | CRUD tests; persistence; no SQL in routes |
+| 1.3 | `buildApp()` + health + shutdown | Health 200; env validation; DB closes on SIGTERM |
 
-### Faz 2 — Yönetim API'si
+### Phase 2 — Admin API
 
-| ID | Görev | Kabul ölçütü |
+| ID | Task | Acceptance criterion |
 |---|---|---|
-| 2.1 | Bearer auth | 401/200; token loglanmaz; public uçlar açık |
-| 2.2 | Flag CRUD + doğrulama | 201/200/400/401/404/409; delete yok |
-| 2.3 | Ortak hata zarfı | Stack sızmaz; tutarlı kodlar |
+| 2.1 | Bearer auth | 401/200; token never logged; public endpoints stay open |
+| 2.2 | Flag CRUD + validation | 201/200/400/401/404/409; no delete |
+| 2.3 | Shared error envelope | No stack leaks; consistent codes |
 
-### Faz 3 — Deterministik değerlendirme
+### Phase 3 — Deterministic evaluation
 
-| ID | Görev | Kabul ölçütü |
+| ID | Task | Acceptance criterion |
 |---|---|---|
-| 3.1 | Evaluator | Golden vector; determinizm; 0/100; disabled |
-| 3.2 | Evaluate route | Sözleşme; unknown 200; DB hatası 503 |
-| 3.3 | Monotonluk + dağılım | 1.000 ID alt küme; 10.000 ID ±%2 |
-| 3.4 | Restart/persistence | Ayar ve sonuç birebir aynı |
+| 3.1 | Evaluator | Golden vectors; determinism; 0/100; disabled |
+| 3.2 | Evaluate route | Contract; unknown 200; DB failure 503 |
+| 3.3 | Monotonicity + distribution | 1,000 IDs subset; 10,000 IDs ±2 points |
+| 3.4 | Restart/persistence | Settings and results identical |
 
-### Faz 4 — Demo ve örnek istemci
+### Phase 4 — Demo and example client
 
-| ID | Görev | Kabul ölçütü |
+| ID | Task | Acceptance criterion |
 |---|---|---|
-| 4.1 | Tek sayfalık demo | Uçtan uca; token HTML'de değil; 20→40 paneli |
-| 4.2 | Örnek istemci + demo script | Çoklu kullanıcı; JSON; 503 fallback |
+| 4.1 | Single-page demo | End to end; token not in HTML; 20→40 panel |
+| 4.2 | Example client + demo script | Multiple users; JSON; 503 fallback |
 
-### Faz 5 — Docker, test ve güvenlik
+### Phase 5 — Docker, tests, and security
 
-| ID | Görev | Kabul ölçütü |
+| ID | Task | Acceptance criterion |
 |---|---|---|
-| 5.1 | Dockerfile + compose | Build/health/restart/down-up; volume kalıcı |
-| 5.2 | Tam test seti | `npm test` tekrarlı yeşil; smoke yeşil |
-| 5.3 | Güvenlik/hijyen | Secret yok; audit; body limiti; timing-safe |
+| 5.1 | Dockerfile + compose | Build/health/restart/down-up; volume persists |
+| 5.2 | Full test suite | `npm test` repeatedly green; smoke green |
+| 5.3 | Security/hygiene | No secrets; audit; body limit; timing-safe |
 
-### Faz 6 — Doküman, video ve final
+### Phase 6 — Documentation, video, and final
 
-| ID | Görev | Kabul ölçütü |
+| ID | Task | Acceptance criterion |
 |---|---|---|
-| 6.1 | README + DECISIONS + EVIDENCE final | Temiz checkout; linkler; gerçek çıktılar |
-| 6.2 | Video + kanıt | 20→40 alt küme, restart, aynı sonuç, testler |
-| 6.3 | Bağımsız review + tag | Tüm kabul ölçütleri; `v1.0.0` |
+| 6.1 | Final README + DECISIONS + EVIDENCE | Clean checkout; links; real outputs |
+| 6.2 | Video + evidence | 20→40 subset, restart, same result, tests |
+| 6.3 | Independent review + tag | All acceptance criteria; `v1.0.0` |
 
-## 7. Test kabul ölçütleri
+## 7. Test acceptance criteria
 
-- Determinizm: aynı girdi → aynı `bucket` ve `enabled`.
-- Monotonluk: `%20` açık kümesi, `%40` açık kümesinin alt kümesi.
-- Dağılım: 10.000 sabit ID'de %20/%40 için ±%2 tolerans.
-- Sınırlar: rollout `0` → kimse; `100` → herkes; `enabled:false` → herkes kapalı.
-- Sözleşme: unknown `200` + `FLAG_NOT_FOUND`; invalid `400`; DB hatası `503`.
-- Auth: admin token yok/yanlış → `401`; evaluate public.
-- Persistence: close/reopen sonrası ayar ve sonuç aynı.
+- Determinism: same input → same `bucket` and `enabled`.
+- Monotonicity: the `%20` included set is a subset of the `%40` included set.
+- Distribution: ±2 point tolerance for %20/%40 across 10,000 fixed IDs.
+- Bounds: rollout `0` → nobody; `100` → everyone; `enabled:false` → everyone
+  off.
+- Contract: unknown `200` + `FLAG_NOT_FOUND`; invalid `400`; DB failure `503`.
+- Auth: missing/wrong admin token → `401`; evaluate is public.
+- Persistence: settings and results identical after close/reopen.
 - Docker: build, health, restart, down/up, volume.
 
-## 8. Demo kabul ölçütleri
+## 8. Demo acceptance criteria
 
-- UI'da flag oluştur, aç/kapat, rollout `20 → 40`.
-- Aynı kullanıcı için tekrar değerlendirme ve sayfa yenileme → aynı sonuç.
-- `docker compose restart` sonrası aynı ayar ve sonuç.
-- Bilinmeyen flag ve token'sız admin isteği örnekleri.
-- `npm test` çıktısı ve 1–2 dk sessiz video.
+- Create a flag, turn it on/off, and move rollout `20 → 40` in the UI.
+- Repeated evaluation for the same user and a page refresh → same result.
+- The same settings and result after `docker compose restart`.
+- Examples with an unknown flag and an admin request without a token.
+- `npm test` output and a 1–2 min silent video.
 
-## 9. Git/push düzeni
+## 9. Git/push workflow
 
-- `origin` HTTPS'e çevrilecek; `gh` credential helper kullanılacak.
-- Trunk-based `main`; sıralı işlerde küçük commit, paralel işlerde kısa ömürlü
-  `task/<id>` dalı.
-- Subagent commit eder; diff + test kontrolünü orchestrator yapar ve push atar.
-- Definition of Done: kabul + test yeşil + doküman/kanıt + commit + push.
-- `main`'e force-push yok; secret commit yok; kırık testle push yok.
-- Finalde `v1.0.0` tag'i push edilir.
+- `origin` will be switched to HTTPS; the `gh` credential helper will be used.
+- Trunk-based `main`; small commits for sequential work, short-lived
+  `task/<id>` branches for parallel work.
+- Subagents commit; the orchestrator checks the diff + tests and pushes.
+- Definition of Done: acceptance + tests green + docs/evidence + commit + push.
+- No force-push to `main`; no secret commits; no pushing with failing tests.
+- The `v1.0.0` tag is pushed at the end.
 
-## 10. Maliyet
+## 10. Cost
 
-| Kalem | Maliyet | Not |
+| Item | Cost | Note |
 |---|---|---|
-| Altyapı | €0 | Local Docker, SQLite, GitHub public repo, yerel video |
-| Model | €0 ek | Mevcut OpenCode Go; DeepSeek V4.1 Flash max |
-| Tahmini marjinal token | ~$1–5 | Go limiti içinde; review/retry payı dahil |
-| Video/CI | €0 | Yerel kayıt; CI opsiyonel |
-| **Toplam ek nakit** | **€0** | Go aboneliği hariç |
+| Infrastructure | €0 | Local Docker, SQLite, public GitHub repo, local video |
+| Model | €0 extra | Existing OpenCode Go; DeepSeek V4.1 Flash max |
+| Estimated marginal tokens | ~$1–5 | Within the Go limit; includes review/retry margin |
+| Video/CI | €0 | Local recording; CI optional |
+| **Total additional cash** | **€0** | Excluding the Go subscription |
 
-Bütçe koruması: Go limitinin %10'una yaklaşma veya tahmini $5 üstü durumda
-durup kullanıcıya sorulur.
+Budget guard: if usage approaches 10% of the Go limit or the estimate exceeds
+$5, stop and ask the user.
 
-## 11. Varsayımlar
+## 11. Assumptions
 
-- GitHub reposu public kalır.
-- Video yerel dosya + README linki; YouTube upload'u ayrıca istenirse yapılır.
-- CI zorunlu değil; kapsamı büyütmemek için opsiyonel.
-- `better-sqlite3` varsayılan; Docker'da sorun çıkarsa `node:sqlite`
-  alternatifine geçilir ve karar `DECISIONS.md`'ye yazılır.
-- Push akışı trunk-based `main`; PR zorunlu değil.
+- The GitHub repository stays public.
+- The video is a local file linked from the README; a YouTube upload is done
+  only if separately requested.
+- CI is not required; it is optional to avoid expanding scope.
+- `better-sqlite3` is the default; if it causes problems in Docker, switch to
+  the `node:sqlite` alternative and record the decision in `DECISIONS.md`.
+- The push workflow is trunk-based `main`; PRs are not required.

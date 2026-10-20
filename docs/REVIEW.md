@@ -1,44 +1,44 @@
-# Bağımsız Final Review ve Kapanış
+# Independent Final Review and Closure
 
 ## Verdict
 
-İlk bağımsız review: **NOT READY** (blocker yok; final EVIDENCE TODO'ları ve
-birkaç minor bulgu vardı).
+First independent review: **NOT READY** (no blockers; the final EVIDENCE TODOs
+and a few minor findings were present).
 
-Düzeltmelerden sonra: **READY** — tüm blocker/major bulgular kapatıldı;
-testler ve Docker smoke yeniden çalıştırıldı.
+After fixes: **READY** — all blocker/major findings were closed; tests and the
+Docker smoke test were re-run.
 
-## Review kapsamı
+## Review scope
 
-Bağımsız reviewer (DeepSeek V4.1 Flash `max`, taze bağlam) şunları kendi
-çalıştırarak doğruladı:
+The independent reviewer (DeepSeek V4.1 Flash `max`, fresh context) verified the
+following by running it directly:
 
-- `npm test` (iki ardışık çalıştırma)
+- `npm test` (two consecutive runs)
 - `npm run smoke`
-- `ffprobe` ile video metadata'sı
+- Video metadata via `ffprobe`
 - `git status`, `git log`, `git remote`, `git tag`
-- Golden vector'lar, 10.000 sabit ID dağılımı ve subset kontrolü
-- Canlı API: auth, create, evaluate, unknown flag, validation
-- Demo UI token davranışı ve 20→40 paneli
-- Örnek istemci 503/exit-code davranışı
-- Docker non-root ve volume kalıcılığı
-- Kapsam dışı özellik kontrolü
+- Golden vectors, 10,000 fixed IDs distribution, and subset check
+- Live API: auth, create, evaluate, unknown flag, validation
+- Demo UI token behavior and the 20→40 panel
+- Example client 503/exit-code behavior
+- Docker non-root and volume persistence
+- Out-of-scope feature check
 
-Reviewer salt okunur çalıştı; dosya değiştirmedi, commit/push atmadı.
+The reviewer worked read-only; did not modify files, commit, or push.
 
-## Bulgular ve kapanış
+## Findings and closure
 
-| ID | Bulgu | Durum |
+| ID | Finding | Status |
 |---|---|---|
-| M1 | `docs/EVIDENCE.md` içinde TODO'lar vardı | Kapatıldı: commit, git log, remote ve tag bilgisi eklendi |
-| m1 | Video 46 sn; plan 1–2 dk diyordu | Kapatıldı: video 62,68 sn olarak yeniden kaydedildi |
-| m2 | README/ADR, MP4 dönüşümü için sistem `ffmpeg` gereksinimini belirtmiyordu | Kapatıldı: README ve ADR-012 güncellendi |
-| m3 | Kapalı DB bağlantısı evaluate'te 500 dönüyordu | Kapatıldı: repository okuma hatası 503'e sarıldı; test eklendi |
-| n1 | `package.json` sürümü `0.1.0`, tag `v1.0.0` | Kapatıldı: sürüm `1.0.0` |
-| n2 | Video test sayısı hardcoded `57/57` | Kapatıldı: test çıktısından parse ediliyor |
-| n3 | Görev 040 brief'indeki demo ID aralığı kodla uyuşmuyordu | Kapatıldı: “seçilmiş 12 ID” olarak güncellendi |
+| M1 | `docs/EVIDENCE.md` contained TODOs | Closed: commit, git log, remote, and tag information added |
+| m1 | Video was 46 s; the plan called for 1–2 min | Closed: video re-recorded at 62.68 s |
+| m2 | README/ADR did not state the system `ffmpeg` requirement for MP4 conversion | Closed: README and ADR-012 updated |
+| m3 | A closed DB connection returned 500 on evaluate | Closed: repository read error wrapped as 503; test added |
+| n1 | `package.json` version was `0.1.0`, tag `v1.0.0` | Closed: version set to `1.0.0` |
+| n2 | Video hardcoded the test count as `57/57` | Closed: parsed from test output |
+| n3 | Demo ID range in the Task 040 brief did not match the code | Closed: updated to "12 selected IDs" |
 
-## Son doğrulama
+## Final verification
 
 ```text
 npm test
@@ -61,14 +61,14 @@ duration=62.680000
 size=580067
 ```
 
-- `main` ve `origin/main` aynı.
-- `v1.0.0` tag'i release commit'ine işaret eder.
-- Docker image non-root `node` kullanıcısıyla çalışır.
-- `.env` repoda izlenmez; smoke gerçek token'ı kullanmaz.
+- `main` and `origin/main` are the same.
+- The `v1.0.0` tag points to the release commit.
+- The Docker image runs as the non-root `node` user.
+- `.env` is not tracked in the repo; the smoke test does not use the real token.
 
-## Kapsam kontrolü
+## Scope check
 
-Özel kural dili, segment, A/B analizi, RBAC, audit log, çoklu ortam, SDK,
-rate limiting, cache, multi-instance, cloud deploy veya flag ile yetkilendirme
-eklenmedi. `playwright-core` yalnızca devDependency'dir ve üretim image'ına
-girmez.
+No custom rule language, segments, A/B analysis, RBAC, audit log, multiple
+environments, SDK, rate limiting, cache, multi-instance, cloud deployment, or
+authorization via flags was added. `playwright-core` is a devDependency only and
+does not enter the production image.

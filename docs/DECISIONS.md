@@ -1,168 +1,177 @@
-# Karar Kaydı (ADR-lite)
+# Decision Record (ADR-lite)
 
-Bu dosya, Switchboard'daki önemli teknik kararları ve sonuçlarını kısa biçimde
-kaydeder. Yeni bir karar, mevcut bir kararı değiştiriyorsa eski kayıt silinmez;
-yeni bir ADR eklenir ve ilişki belirtilir.
+This file briefly records the important technical decisions in Switchboard and
+their consequences. If a new decision supersedes an existing one, the old record
+is not deleted; a new ADR is added and the relationship is stated.
 
-## ADR-001 — Deterministik gruplama için SHA-256
+## ADR-001 — SHA-256 for deterministic bucketing
 
-**Bağlam:** Aynı kullanıcı, aynı flag ve aynı rollout ayarında her zaman aynı
-sonucu almalı. Yüzde artırıldığında önceki açık grup korunmalı.
+**Context:** The same user must always get the same result for the same flag and
+rollout settings. When the percentage increases, the previously included group
+must be preserved.
 
-**Karar:** `SHA-256(flagKey + ":" + userId)` hash'inin ilk 32 biti 0–99
-aralığına eşlenir. Kullanıcı, `bucket < rolloutPercentage` ise açık sayılır.
+**Decision:** The first 32 bits of the `SHA-256(flagKey + ":" + userId)` hash
+are mapped to the 0–99 range. A user is included when
+`bucket < rolloutPercentage`.
 
-**Sonuçlar:**
-- Yüzde değişince yeniden hash yapılmaz; `%20 → %40` geçişinde eski küme
-  korunur.
-- Node'un yerleşik `crypto` modülü yeterli; ek bağımlılık yok.
-- `flagKey` immutable kabul edilir. Rename, grupları değiştirir.
-- Algoritma sürümü kodda sabittir. Değişiklik, kullanıcı gruplarını yeniden
-  dağıtır.
+**Consequences:**
+- Changing the percentage does not re-hash; on a `%20 → %40` move, the previous
+  set is preserved.
+- Node's built-in `crypto` module is sufficient; no extra dependency.
+- `flagKey` is treated as immutable. Renaming changes groups.
+- The algorithm version is fixed in code. Changing it redistributes user
+  groups.
 
-## ADR-002 — Bilinmeyen flag için 200 + FLAG_NOT_FOUND
+## ADR-002 — 200 + FLAG_NOT_FOUND for an unknown flag
 
-**Bağlam:** Çağıran uygulamalar bilinmeyen bir flag ile karşılaşabilir. Bu,
-servis hatası mı yoksa normal bir “kapalı” durumu mu?
+**Context:** Calling applications may encounter an unknown flag. Is that a
+service failure or a normal "off" state?
 
-**Karar:** Bilinmeyen flag `200` döner; `enabled:false`, `reason:"FLAG_NOT_FOUND"`,
-`bucket:null`, `rolloutPercentage:null`.
+**Decision:** An unknown flag returns `200`; `enabled:false`,
+`reason:"FLAG_NOT_FOUND"`, `bucket:null`, `rolloutPercentage:null`.
 
-**Sonuçlar:**
-- İstemci tarafında tek bir başarı yolu vardır; 404 ayrı ele alınmaz.
-- Flag silinmesi/oluşturulmaması, çağıran uygulamayı durdurmaz.
-- Yönetim API'sinde bilinmeyen flag yine `404` döner; bu ayrım README'de
-  açıklanır.
+**Consequences:**
+- There is a single success path on the client; 404 is not handled separately.
+- A flag being deleted or never created does not stop the calling application.
+- The admin API still returns `404` for an unknown flag; this distinction is
+  explained in the README.
 
-## ADR-003 — DB hatasında 503, sessiz fallback yok
+## ADR-003 — 503 on DB failure, no silent fallback
 
-**Bağlam:** SQLite açılamazsa veya sorgu başarısız olursa değerlendirme
-yapılamaz. Sessizce `true` veya `false` dönmek yanıltıcı olabilir.
+**Context:** If SQLite cannot be opened or a query fails, evaluation cannot
+happen. Silently returning `true` or `false` could be misleading.
 
-**Karar:** Değerlendirme sırasında DB hatası `503` +
-`EVALUATION_UNAVAILABLE` olarak döner. Örnek istemci bu durumda `false`
-fallback'ine düşer ve bunu loglar.
+**Decision:** A DB failure during evaluation returns `503` +
+`EVALUATION_UNAVAILABLE`. In that case the example client falls back to `false`
+and logs it.
 
-**Sonuçlar:**
-- Servis hatası ile “flag kapalı” birbirinden ayrılır.
-- Fail-open yapılmaz; flag'ler yetkilendirme yerine geçmez.
-- Çağıran uygulama kendi fallback politikasını açıkça seçer.
+**Consequences:**
+- Service failure is distinguished from "flag off".
+- There is no fail-open; flags do not replace authorization.
+- The calling application explicitly chooses its own fallback policy.
 
-## ADR-004 — Yönetim için tek Bearer token
+## ADR-004 — Single Bearer token for admin
 
-**Bağlam:** Tek ortamlı, küçük bir demo servisi için kullanıcı hesabı sistemi
-gereksiz.
+**Context:** A user account system is unnecessary for a small,
+single-environment demo service.
 
-**Karar:** Yönetim uçları `ADMIN_TOKEN` ortam değişkeni ve
-`Authorization: Bearer` ile korunur. Karşılaştırma `timingSafeEqual` ile
-yapılır. `/api/evaluate` ve `/healthz` public kalır.
+**Decision:** Admin endpoints are protected by the `ADMIN_TOKEN` environment
+variable and `Authorization: Bearer`. Comparison uses `timingSafeEqual`.
+`/api/evaluate` and `/healthz` remain public.
 
-**Sonuçlar:**
-- Kurulum basit; token repoya girmez.
-- Bu, üretim seviyesinde kimlik doğrulama değildir; README'de açıkça belirtilir.
-- Çok kullanıcılı yönetim, RBAC ve audit log kapsam dışıdır.
+**Consequences:**
+- Setup is simple; the token never enters the repository.
+- This is not production-grade authentication; the README states this
+  explicitly.
+- Multi-user administration, RBAC, and audit logs are out of scope.
 
 ## ADR-005 — SQLite + better-sqlite3
 
-**Bağlam:** Tek instance, düşük trafik, kalıcılık ve basit kurulum hedefleniyor.
+**Context:** The target is a single instance, low traffic, persistence, and
+simple setup.
 
-**Karar:** SQLite dosyası; `better-sqlite3` senkron API; WAL modu; Docker volume.
+**Decision:** SQLite file; `better-sqlite3` synchronous API; WAL mode; Docker
+volume.
 
-**Sonuçlar:**
-- Ek veritabanı sunucusu yok; yerel başlatma kolay.
-- Senkron sorgular tek instance için yeterli; yüksek eşzamanlılık hedefi yok.
-- Docker image'ında native modül için build araçları gerekebilir; smoke test
-  bunu doğrular. Sorun çıkarsa `node:sqlite` alternatifi değerlendirilir.
+**Consequences:**
+- No extra database server; local startup is easy.
+- Synchronous queries are sufficient for a single instance; high concurrency is
+  not a goal.
+- The Docker image may need build tools for the native module; the smoke test
+  verifies this. If problems arise, the `node:sqlite` alternative is evaluated.
 
 ## ADR-006 — flagKey immutable
 
-**Bağlam:** Gruplama `flagKey` üzerinden yapılıyor. Key değişirse tüm
-kullanıcıların bucket'ları değişir.
+**Context:** Bucketing is based on `flagKey`. If the key changes, every user's
+bucket changes.
 
-**Karar:** Flag key oluşturulduktan sonra değiştirilemez; rename endpoint'i yok.
+**Decision:** A flag key cannot be changed after creation; there is no rename
+endpoint.
 
-**Sonuçlar:**
-- Determinizm korunur.
-- Key değiştirmek isteyen kullanıcı yeni flag oluşturur; bu, rollout geçmişini
-  sıfırlar.
-- README'de “key'i stabil tutun” uyarısı bulunur.
+**Consequences:**
+- Determinism is preserved.
+- A user who wants to change the key creates a new flag; this resets rollout
+  history.
+- The README includes the "keep the key stable" warning.
 
-## ADR-007 — Değerlendirmede cache yok
+## ADR-007 — No cache during evaluation
 
-**Bağlam:** Tek instance ve küçük veri seti var. Cache, güncelleme sonrası
-tutarsızlık ve ek karmaşıklık getirir.
+**Context:** There is a single instance and a small data set. A cache introduces
+inconsistency after updates and additional complexity.
 
-**Karar:** Her değerlendirme SQLite'tan okunur; cache yok.
+**Decision:** Every evaluation reads from SQLite; no cache.
 
-**Sonuçlar:**
-- Güncellemeler bir sonraki istekte görünür.
-- SQLite okuma maliyeti bu ölçekte kabul edilebilir.
-- Yatay ölçekleme ve cache kapsam dışıdır.
+**Consequences:**
+- Updates are visible on the next request.
+- SQLite read cost is acceptable at this scale.
+- Horizontal scaling and caching are out of scope.
 
-## ADR-008 — Trunk-based git ve her yeşil görevde push
+## ADR-008 — Trunk-based git and a push for every green task
 
-**Bağlam:** Kullanıcı, her anlamlı geliştirmede GitHub'a push istiyor. Review
-atlanmadan ilerlenmeli.
+**Context:** The user wants a push to GitHub for every meaningful change.
+Progress should not skip review.
 
-**Karar:** Sıralı işlerde `main` üzerinde küçük commit'ler; paralel işlerde kısa
-ömürlü `task/<id>` dalları. Subagent commit eder; orchestrator diff + test
-kontrolünden sonra push atar. Definition of Done push'u içerir.
+**Decision:** Small commits on `main` for sequential work; short-lived
+`task/<id>` branches for parallel work. Subagents commit; the orchestrator
+pushes after checking the diff + tests. Definition of Done includes the push.
 
-**Sonuçlar:**
-- `main` her zaman yeşil kalır.
-- Push geçmişi küçük ve anlaşılır olur.
-- Force-push ve secret commit yasaktır.
+**Consequences:**
+- `main` always stays green.
+- Push history stays small and understandable.
+- Force-push and secret commits are forbidden.
 
-## ADR-009 — Merkezi dokümanlar + görev brief'leri
+## ADR-009 — Central docs + task briefs
 
-**Bağlam:** Az sayıda kalıcı doküman, çok sayıda dağınık görev raporundan daha
-okunabilir.
+**Context:** A small number of durable documents is more readable than many
+scattered task reports.
 
-**Karar:** `docs/PLAN.md`, `docs/DECISIONS.md`, `docs/EVIDENCE.md` merkezi;
-`docs/tasks/NN-*.md` yalnızca subagent'lara verilen kısa brief'ler için.
+**Decision:** `docs/PLAN.md`, `docs/DECISIONS.md`, and `docs/EVIDENCE.md` are
+central; `docs/tasks/NN-*.md` is used only for the short briefs handed to
+subagents.
 
-**Sonuçlar:**
-- Kalıcı bilgi tek yerde; görev brief'leri geçici.
-- README dış dünyaya açılan ana kapı olur.
-- Her görev brief'i kabul ölçütü ve dosya sınırı içerir.
+**Consequences:**
+- Durable knowledge lives in one place; task briefs are temporary.
+- The README is the main gateway to the outside world.
+- Every task brief includes acceptance criteria and file boundaries.
 
-## ADR-010 — Sessiz video + ekran üstü açıklamalar
+## ADR-010 — Silent video + on-screen captions
 
-**Bağlam:** Kısa demo videosu seslendirme gerektirmeden anlaşılır olmalı.
+**Context:** The short demo video should be understandable without a voiceover.
 
-**Karar:** 1–2 dakikalık sessiz ekran kaydı; kritik adımlarda kısa ekran üstü
-metinler; README'de komut çıktıları ve timestamp'li kanıt.
+**Decision:** A 1–2 minute silent screen recording; short on-screen text at
+critical steps; command output and timestamped evidence in the README.
 
-**Sonuçlar:**
-- Video üretimi ve izlenmesi kolay.
-- Teknik ayrıntı README ve `EVIDENCE.md`'de kalır.
-- Seslendirme ayrıca istenirse ayrı bir sürüm olarak eklenebilir.
+**Consequences:**
+- Video production and viewing are easy.
+- Technical detail stays in the README and `EVIDENCE.md`.
+- A voiceover version can be added separately if requested.
 
-## ADR-011 — Docker'da better-sqlite3 için deps aşamasında build fallback
+## ADR-011 — Build fallback in the deps stage for better-sqlite3 in Docker
 
-**Bağlam:** `better-sqlite3` native bir modüldür. Bu ortamda Docker build
-sırasında prebuilt binary indirilemedi.
+**Context:** `better-sqlite3` is a native module. In this environment, the
+prebuilt binary could not be downloaded during the Docker build.
 
-**Karar:** Dockerfile önce `npm ci --omit=dev` dener; başarısız olursa yalnızca
-deps aşamasında `python3 make g++` kurup derler ve aynı aşamada temizler.
-Runtime image non-root `node` kullanıcısıyla çalışır.
+**Decision:** The Dockerfile first tries `npm ci --omit=dev`; if that fails, it
+installs `python3 make g++` only in the deps stage, compiles, and removes them
+in the same stage. The runtime image runs as the non-root `node` user.
 
-**Sonuçlar:**
-- İlk build daha uzun sürebilir; runtime image'da build aracı kalmaz.
-- Smoke testi build, health, restart ve volume kalıcılığını doğrular.
-- Prebuilt binary ileride çalışırsa fallback devreye girmez.
+**Consequences:**
+- The first build may take longer; no build tools remain in the runtime image.
+- The smoke test verifies build, health, restart, and volume persistence.
+- If the prebuilt binary works in the future, the fallback is not triggered.
 
-## ADR-012 — Demo kaydı için dev-only Playwright-core
+## ADR-012 — Dev-only Playwright-core for demo recording
 
-**Bağlam:** Demo videosu gerçek UI etkileşimlerini göstermeli; uygulama
-bağımlılıkları şişmemeli.
+**Context:** The demo video should show real UI interactions; application
+dependencies should not grow.
 
-**Karar:** `scripts/record-demo.mjs`, devDependency olan `playwright-core` ve
-sistem Chrome'u kullanır. Video codec'i için Playwright'ın FFmpeg bileşeni
-bir kez indirilir; MP4 dönüşümü sistem `ffmpeg` ile yapılır. Üretim Docker
-image'ı `npm ci --omit=dev` kullandığı için Playwright image'a girmez.
+**Decision:** `scripts/record-demo.mjs` uses the `playwright-core` devDependency
+and system Chrome. Playwright's FFmpeg component is downloaded once for the
+video codec; MP4 conversion uses system `ffmpeg`. Because the production Docker
+image uses `npm ci --omit=dev`, Playwright does not enter the image.
 
-**Sonuçlar:**
-- Video gerçek tarayıcı etkileşimiyle üretilir; browser panel bağımlılığı yok.
-- Kayıt için yerel Chrome ve tek seferlik FFmpeg bileşeni gerekir.
-- Video `demo/switchboard-demo.mp4` olarak kanıta eklenir.
+**Consequences:**
+- Video is produced from real browser interaction; there is no browser-panel
+  dependency.
+- Recording requires local Chrome and the one-time FFmpeg component.
+- The video is added as evidence at `demo/switchboard-demo.mp4`.

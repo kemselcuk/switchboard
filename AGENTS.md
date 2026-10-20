@@ -1,23 +1,23 @@
-# Switchboard — Agent Kuralları
+# Switchboard — Agent Rules
 
-Bu dosya, bu repoda çalışan tüm ajanlar için bağlayıcı proje kurallarıdır.
-`docs/PLAN.md` ve `docs/DECISIONS.md` ile birlikte okunur.
+This file contains the binding project rules for every agent working in this
+repository. Read it together with `docs/PLAN.md` and `docs/DECISIONS.md`.
 
-## Proje
+## Project
 
-Switchboard, küçük ve tek ortamlı bir feature flag servisidir. Boolean flag'ler,
-tam açık/kapalı ve deterministik yüzdelik rollout desteklenir. Flag'ler
-yetkilendirme mekanizması değildir.
+Switchboard is a small, single-environment feature flag service. It supports
+boolean flags, full on/off control, and deterministic percentage rollouts.
+Flags are not an authorization mechanism.
 
 ## Stack
 
 - Node.js 22+ (ESM)
 - Fastify 5
 - SQLite + `better-sqlite3`
-- `@fastify/static` (tek sayfalık demo)
+- `@fastify/static` (single-page demo)
 - `node:test` + Fastify `inject`
 
-## Komutlar
+## Commands
 
 ```bash
 npm ci            # bağımlılıkları kur
@@ -27,62 +27,62 @@ npm start         # yerel çalışma
 npm run smoke     # Docker smoke testi
 ```
 
-## Kod kuralları
+## Code rules
 
-- ESM (`import`/`export`), 2 boşluk, noktalı virgül, tek tırnak.
-- Route handler'lar ince olmalı; iş kuralları `src/flags/` altında.
-- SQL yalnızca `src/db.js` ve `src/flags/repository.js` içinde.
-- Hatalar ortak `{ error: { code, message } }` zarfını kullanır.
-- Kullanıcı girdisi JSON schema ile doğrulanır; `userId` normalize edilmez.
-- Secret, token veya `.env` içeriği loglanmaz/commit edilmez.
+- ESM (`import`/`export`), 2 spaces, semicolons, single quotes.
+- Route handlers stay thin; business rules live under `src/flags/`.
+- SQL only in `src/db.js` and `src/flags/repository.js`.
+- Errors use the shared `{ error: { code, message } }` envelope.
+- User input is validated with JSON schema; `userId` is not normalized.
+- Secrets, tokens, and `.env` contents are never logged or committed.
 
-## Kapsam sınırı
+## Scope boundaries
 
-Şunları eklemeyin: özel kural dili, segmentler, A/B analizi, kullanıcı
-hesapları/RBAC, audit log, çoklu ortam, SDK'lar, rate limiting, cache,
-multi-instance, Postgres, cloud deploy, flag silme/rename, flag ile
-yetkilendirme. Yeni bir ihtiyaç varsa önce `docs/PLAN.md` güncellenir ve
-kullanıcıya sorulur.
+Do not add: a custom rule language, segments, A/B analysis, user accounts/RBAC,
+an audit log, multiple environments, SDKs, rate limiting, caching,
+multi-instance support, Postgres, cloud deployment, flag deletion/renaming, or
+authorization via flags. If a new need arises, update `docs/PLAN.md` first and
+ask the user.
 
-## Çalışma akışı
+## Workflow
 
-1. Görev brief'ini oku; brief yoksa kodlamaya başlama.
-2. Küçük, tek amaçlı değişiklik yap.
-3. `npm test` çalıştır; ilgiliyse Docker smoke testini çalıştır.
-4. `docs/EVIDENCE.md`'ye gerçek çıktı ekle (uydurma çıktı yasak).
-5. Commit at. Subagent'lar push atmaz; push'u orchestrator yapar.
-6. Diff + test sonucu olmadan “bitti” deme.
+1. Read the task brief; do not start coding without one.
+2. Make a small, single-purpose change.
+3. Run `npm test`; run the Docker smoke test when relevant.
+4. Add real output to `docs/EVIDENCE.md` (fabricated output is forbidden).
+5. Commit. Subagents do not push; the orchestrator pushes.
+6. Do not say "done" without a diff and test results.
 
 ## Git
 
-- `main` her zaman yeşil kalır.
-- Anlamlı her görevde commit + push hedeflenir.
-- Paralel işlerde kısa ömürlü `task/<id>` dalı kullanılır.
-- Force-push, `git reset --hard` ile başkasının işini silme ve secret commit
-  yasaktır.
-- Commit mesajları: `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
+- `main` always stays green.
+- Every meaningful task aims for a commit and push.
+- Parallel work uses short-lived `task/<id>` branches.
+- Force-pushing, deleting others' work with `git reset --hard`, and committing
+  secrets are forbidden.
+- Commit messages: `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
 
-## Test beklentisi
+## Test expectations
 
-- Determinizm, monotonluk, sınırlar, sözleşme, auth, DB hatası ve persistence
-  testleri zorunludur.
-- İstatistiksel testlerde sabit ID listeleri kullanılır; küçük örneklemde tam
-  yüzde iddia edilmez.
-- Testler `:memory:` veya geçici dosya DB kullanır; gerçek `data/` dizinine
-  dokunmaz.
+- Determinism, monotonicity, bounds, contract, auth, DB failure, and persistence
+  tests are required.
+- Statistical tests use fixed ID lists; exact percentages are not asserted for
+  small samples.
+- Tests use `:memory:` or a temporary file database; they never touch the real
+  `data/` directory.
 
-## Dokümanlar
+## Documentation
 
-- `README.md` — dış kullanıcı için giriş, kurulum, API, entegrasyon.
-- `docs/PLAN.md` — kapsam, aşamalar, kabul ölçütleri.
-- `docs/DECISIONS.md` — ADR-lite kararlar.
-- `docs/EVIDENCE.md` — gerçek test/demo kanıtları.
-- `docs/tasks/` — kısa görev brief'leri.
+- `README.md` — entry point, setup, API, and integration for external users.
+- `docs/PLAN.md` — scope, phases, acceptance criteria.
+- `docs/DECISIONS.md` — ADR-lite decisions.
+- `docs/EVIDENCE.md` — real test/demo evidence.
+- `docs/tasks/` — short task briefs.
 
-## Güvenlik
+## Security
 
-- `ADMIN_TOKEN` yalnızca ortam değişkeninden okunur.
-- Token karşılaştırması sabit zamanlıdır.
-- Hata yanıtlarında stack trace, dosya yolu veya token bulunmaz.
-- Demo sayfası token'ı HTML'e gömmez; `sessionStorage` kullanır.
-- Flag'ler yetkilendirme için kullanılmaz; README'de bu uyarı korunur.
+- `ADMIN_TOKEN` is read only from an environment variable.
+- Token comparison is constant-time.
+- Error responses contain no stack trace, file path, or token.
+- The demo page does not embed the token in HTML; it uses `sessionStorage`.
+- Flags are not used for authorization; this warning stays in the README.

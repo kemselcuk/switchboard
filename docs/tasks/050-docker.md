@@ -1,85 +1,86 @@
-# Görev 050 — Docker, volume ve smoke testi
+# Task 050 — Docker, volume, and smoke test
 
-## Hedef
+## Goal
 
-Servisi tek komutla Docker'da çalıştır; SQLite volume'u ile restart ve
-down/up sonrası kalıcılığı doğrula. Uygulama kodunda davranış değişikliği yapma
-(zorunlu değilse).
+Run the service in Docker with a single command; verify persistence across
+restart and down/up with a SQLite volume. Do not change application behavior
+(unless required).
 
-## Dosyalar
+## Files
 
-- `Dockerfile` (yeni)
-- `compose.yaml` (yeni)
-- `.dockerignore` (yeni)
-- `scripts/smoke-docker.sh` (yeni)
-- `package.json` (`smoke` script'i zaten var; gerekirse düzelt)
-- `README.md` (Docker hızlı başlatma bölümü)
-- `docs/EVIDENCE.md` (gerçek Docker çıktıları)
+- `Dockerfile` (new)
+- `compose.yaml` (new)
+- `.dockerignore` (new)
+- `scripts/smoke-docker.sh` (new)
+- `package.json` (the `smoke` script already exists; fix it if needed)
+- `README.md` (Docker quick start section)
+- `docs/EVIDENCE.md` (real Docker output)
 
-## Docker gereksinimleri
+## Docker requirements
 
-- `node:22-bookworm-slim` tabanlı multi-stage build.
-- `npm ci --omit=dev`; üretim bağımlılıkları.
-- `better-sqlite3` native modülü build sırasında sorun çıkarırsa gerekli
-  build araçlarını yalnızca deps aşamasında kullan; runtime image'ı şişirme.
-- Non-root `node` kullanıcısı.
-- `/app/data` dizini oluştur ve `node` kullanıcısına ver.
+- Multi-stage build based on `node:22-bookworm-slim`.
+- `npm ci --omit=dev`; production dependencies.
+- If the `better-sqlite3` native module causes problems during build, use the
+  required build tools only in the deps stage; do not bloat the runtime image.
+- Non-root `node` user.
+- Create the `/app/data` directory and give it to the `node` user.
 - `EXPOSE 3000`; `CMD ["node", "src/server.js"]`.
-- `.dockerignore`: `node_modules`, `data`, `.git`, `.env`, loglar, test/demo
-  dışı gereksiz dosyalar.
+- `.dockerignore`: `node_modules`, `data`, `.git`, `.env`, logs, and unnecessary
+  files that are not tests/demo.
 
-## Compose gereksinimleri
+## Compose requirements
 
-- `switchboard` servisi; `build: .`.
+- `switchboard` service; `build: .`.
 - Port: `${PORT:-3000}:3000`.
-- Env: `ADMIN_TOKEN` zorunlu; `DB_PATH=/app/data/switchboard.db`;
+- Env: `ADMIN_TOKEN` required; `DB_PATH=/app/data/switchboard.db`;
   `HOST=0.0.0.0`; `LOG_LEVEL`.
 - Named volume: `switchboard-data:/app/data`.
-- Healthcheck: `/healthz` için Node fetch; interval 5s, retries 10.
+- Healthcheck: Node fetch against `/healthz`; interval 5s, retries 10.
 - `init: true`.
-- `ADMIN_TOKEN` yoksa compose net hata vermeli; gizli varsayılan token
-  kullanılmamalı.
+- Compose must fail clearly when `ADMIN_TOKEN` is missing; no hidden default
+  token.
 
 ## Smoke test — `scripts/smoke-docker.sh`
 
-`set -euo pipefail`; proje adı `switchboard-smoke`; port `3101`; token
-`smoke-token` (yalnızca smoke).
+`set -euo pipefail`; project name `switchboard-smoke`; port `3101`; token
+`smoke-token` (smoke only).
 
-Akış:
+Flow:
 
-1. `docker compose -p switchboard-smoke down -v` ile temiz başlangıç.
+1. Clean start with `docker compose -p switchboard-smoke down -v`.
 2. `docker compose -p switchboard-smoke up -d --build`.
-3. `/healthz` için en fazla 30 sn bekle.
-4. `smoke-flag` oluştur (`enabled=true`, `rolloutPercentage=20`).
-5. Sabit `user-123` için değerlendir; sonucu kaydet.
-6. `docker compose restart`; health bekle; aynı kullanıcıyı tekrar değerlendir;
-   `bucket` ve `enabled` aynı olmalı.
-7. `down` (volume'u silmeden) + `up -d`; health bekle; flag ve sonuç hâlâ aynı
-   olmalı.
-8. `down -v` ile temizle (trap ile hata durumunda da temizle).
-9. Her adımı gerçek çıktıyla yazdır.
+3. Wait up to 30 s for `/healthz`.
+4. Create `smoke-flag` (`enabled=true`, `rolloutPercentage=20`).
+5. Evaluate the fixed `user-123`; store the result.
+6. `docker compose restart`; wait for health; evaluate the same user again;
+   `bucket` and `enabled` must be the same.
+7. `down` (without deleting the volume) + `up -d`; wait for health; the flag and
+   result must still be the same.
+8. Clean up with `down -v` (also clean up on error via a trap).
+9. Print every step with real output.
 
-JSON ayrıştırma için `node -e` kullan; `jq` varsayma.
+Use `node -e` for JSON parsing; do not assume `jq` is available.
 
 ## README
 
-- Docker hızlı başlatma:
+- Docker quick start:
   ```bash
   cp .env.example .env
   docker compose up --build
   ```
-- `docker compose down` verinin silinmediğini; `down -v` sildiğini açıkla.
+- Explain that `docker compose down` does not delete data, while `down -v` does.
 
-## Kabul ölçütleri
+## Acceptance criteria
 
-- `docker compose up --build` başarılı; healthcheck healthy.
-- `npm run smoke` başarılı ve gerçek çıktı `EVIDENCE.md`'de.
-- Restart ve down/up sonrası flag ayarı ve aynı kullanıcı sonucu korunuyor.
-- `docker compose down -v` sonrası temiz başlangıç.
-- Image non-root çalışıyor (`docker compose exec switchboard id`).
-- `npm test` hâlâ yeşil.
-- Commit at, push atma. Commit mesajı: `chore: add Docker setup and smoke test`.
+- `docker compose up --build` succeeds; healthcheck is healthy.
+- `npm run smoke` succeeds and the real output is in `EVIDENCE.md`.
+- Flag settings and the same user's result are preserved after restart and
+  down/up.
+- Clean start after `docker compose down -v`.
+- The image runs non-root (`docker compose exec switchboard id`).
+- `npm test` still green.
+- Commit; do not push. Commit message: `chore: add Docker setup and smoke test`.
 
-## Kapsam dışı
+## Out of scope
 
-CI, cloud deploy, Postgres, multi-instance, auth değişikliği, yeni API.
+CI, cloud deployment, Postgres, multi-instance, auth changes, new API.

@@ -1,12 +1,12 @@
-# Görev 060 — Bağımsız final review
+# Task 060 — Independent final review
 
-## Amaç
+## Purpose
 
-Switchboard teslimini, kullanıcının ilk brief'ine ve onaylanan plana göre
-bağımsız olarak denetle. Bu görev **salt okunur** bir review'dır: dosya
-değiştirme, commit veya push yapma. Bulguları önem derecesine göre raporla.
+Independently audit the Switchboard delivery against the user's original brief
+and the approved plan. This task is a **read-only** review: do not modify files,
+commit, or push. Report findings by severity.
 
-## Okunacaklar
+## What to read
 
 - `AGENTS.md`
 - `docs/PLAN.md`
@@ -17,56 +17,57 @@ değiştirme, commit veya push yapma. Bulguları önem derecesine göre raporla.
 - `Dockerfile`, `compose.yaml`, `.dockerignore`
 - `package.json`, `.env.example`, `.gitignore`
 
-## Kontrol listesi
+## Checklist
 
-### Ürün ve sözleşme
+### Product and contract
 
-- Boolean flag oluşturma/güncelleme var mı?
-- Tam açık/kapalı ve yüzdelik rollout çalışıyor mu?
-- `POST /api/evaluate` `flagKey` + `userId` ile çalışıyor mu?
-- Aynı ayarlarda aynı kullanıcı aynı sonucu alıyor mu?
-- `%20 → %40` geçişinde önceki açık grup korunuyor mu?
-- Bilinmeyen flag `200 + FLAG_NOT_FOUND` dönüyor mu?
-- DB hatası `503 + EVALUATION_UNAVAILABLE` dönüyor mu; sessiz fail-open var mı?
-- Admin uçları Bearer token ile korunuyor mu; evaluate/health public mi?
-- Hata yanıtlarında stack/token/DB yolu sızıyor mu?
+- Does it create/update boolean flags?
+- Do full on/off and percentage rollouts work?
+- Does `POST /api/evaluate` work with `flagKey` + `userId`?
+- Does the same user get the same result under the same settings?
+- Is the previously included group preserved on a `%20 → %40` move?
+- Does an unknown flag return `200 + FLAG_NOT_FOUND`?
+- Does a DB failure return `503 + EVALUATION_UNAVAILABLE`; is there any silent
+  fail-open?
+- Are admin endpoints protected by a Bearer token; are evaluate/health public?
+- Do error responses leak a stack trace/token/DB path?
 
-### Algoritma
+### Algorithm
 
-- SHA-256, ilk 4 byte big-endian, bucket 0–99 formülü doğru mu?
-- `bucket < rolloutPercentage` koşulu doğru mu?
-- `flagKey` immutable varsayımı kod ve dokümanda tutarlı mı?
-- Golden vector'lar bağımsız olarak doğrulanabilir mi?
-- Monotonluk ve dağılım testleri deterministik mi?
-- Küçük örneklemde tam yüzde iddiası var mı?
+- Is the SHA-256, first 4 bytes big-endian, bucket 0–99 formula correct?
+- Is the `bucket < rolloutPercentage` condition correct?
+- Is the immutable `flagKey` assumption consistent in code and documentation?
+- Can the golden vectors be verified independently?
+- Are the monotonicity and distribution tests deterministic?
+- Is there any claim of exact percentages for a small sample?
 
-### Kalıcılık ve altyapı
+### Persistence and infrastructure
 
-- SQLite şeması, WAL ve volume doğru mu?
-- `app.close()` DB'yi kapatıyor mu?
-- Restart ve down/up sonrası ayar/sonuç korunuyor mu?
-- Docker non-root mu?
-- `ADMIN_TOKEN` zorunlu mu; gizli varsayılan var mı?
+- Are the SQLite schema, WAL, and volume correct?
+- Does `app.close()` close the DB?
+- Are settings/results preserved after restart and down/up?
+- Is Docker non-root?
+- Is `ADMIN_TOKEN` required; is there a hidden default?
 
-### Demo, test ve doküman
+### Demo, tests, and documentation
 
-- Demo UI token'ı HTML'e gömüyor mu?
-- 20→40 paneli gerçekten korunan/yeni açılan gösteriyor mu?
-- Örnek istemci 503 fallback'ini doğru uyguluyor mu?
-- `npm test` gerçekten yeşil mi; testler kapsamı gerçekten kontrol ediyor mu?
-- `npm run smoke` gerçekten çalışıyor mu?
-- README entegrasyon, algoritma, testler ve kanıtları açıklıyor mu?
-- Video gerçek akışı gösteriyor mu; süre/format makul mü?
-- Push geçmişi ve tag durumu temiz mi?
+- Does the demo UI embed the token in HTML?
+- Does the 20→40 panel really show preserved/newly opened users?
+- Does the example client apply the 503 fallback correctly?
+- Is `npm test` really green; do the tests really cover the scope?
+- Does `npm run smoke` really work?
+- Does the README explain integration, the algorithm, tests, and evidence?
+- Does the video show the real flow; are duration/format reasonable?
+- Are the push history and tag state clean?
 
-### Kapsam
+### Scope
 
-- Özel kural dili, segment, A/B analizi, RBAC, audit log, çoklu ortam, SDK,
-  rate limiting, cache, multi-instance, cloud deploy veya flag ile
-  yetkilendirme eklenmiş mi?
-- Gereksiz büyüme / kapsam kayması var mı?
+- Was a custom rule language, segments, A/B analysis, RBAC, audit log, multiple
+  environments, SDK, rate limiting, cache, multi-instance, cloud deployment, or
+  authorization via flags added?
+- Is there unnecessary growth / scope drift?
 
-## Komutlar
+## Commands
 
 ```bash
 npm test
@@ -77,15 +78,15 @@ git log --oneline -15
 git remote -v
 ```
 
-## Çıktı formatı
+## Output format
 
 1. **Verdict:** `READY` / `NOT READY`
-2. **Blocker:** varsa dosya/satır ve neden
-3. **Major:** varsa
-4. **Minor:** varsa
-5. **Nit:** varsa
-6. **Kanıt:** çalıştırılan komutlar ve gerçek çıktı özeti
-7. **Kapsam kontrolü:** eklenen/kaymış işler
-8. **Öneri:** tag öncesi yapılması gerekenler
+2. **Blocker:** file/line and reason, if any
+3. **Major:** if any
+4. **Minor:** if any
+5. **Nit:** if any
+6. **Evidence:** commands run and a summary of real output
+7. **Scope check:** added/drifted work
+8. **Recommendation:** what should be done before tagging
 
-Dosya değiştirme, commit/push yapma, yeni dosya oluşturma.
+Do not modify files, commit/push, or create new files.
