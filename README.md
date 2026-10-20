@@ -24,10 +24,31 @@ npm start
 
 Demo: http://localhost:3000
 
-Docker:
+## Docker ile çalıştırma
+
+`.env` dosyasını oluşturup `ADMIN_TOKEN` değerini değiştirin:
 
 ```bash
+cp .env.example .env
 docker compose up --build
+```
+
+Servis http://localhost:3000 adresinde çalışır. `ADMIN_TOKEN` tanımlı değilse
+`docker compose` açık bir hata verir; compose dosyasında gizli bir varsayılan
+token yoktur.
+
+SQLite verisi `switchboard-data` named volume'unda tutulur:
+
+- `docker compose down` container'ı kaldırır, volume'u korur; sonraki
+  `docker compose up` ile flag'ler yerinde kalır.
+- `docker compose down -v` volume'u de siler; bir sonraki başlatma boş
+  veritabanıyla başlar.
+
+Docker smoke testi (temiz volume, build, health, restart, down/up ve
+kalıcılık):
+
+```bash
+npm run smoke
 ```
 
 ## Dokümanlar

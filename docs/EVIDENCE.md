@@ -262,14 +262,174 @@ kullanılır.
 
 ## 5. Yeniden başlatma / kalıcılık
 
-```bash
-# TODO: docker compose restart sonrası aynı sonuç
+`npm run smoke` içindeki restart adımı; flag ayarı ve aynı kullanıcı sonucu
+korunuyor:
+
+```text
+== 6. Restart and re-evaluate ==
+$ docker compose -p switchboard-smoke restart
+ Container switchboard-smoke-switchboard-1 Restarting
+ Container switchboard-smoke-switchboard-1 Started
+health: {"status":"ok"}
+flag after restart: {"id":1,"key":"smoke-flag","description":"Docker smoke test","enabled":true,"rolloutPercentage":20,"createdAt":"2026-10-20T14:21:29.914Z","updatedAt":"2026-10-20T14:21:29.914Z"}
+OK: restart.enabled = true
+OK: restart.rolloutPercentage = 20
+evaluate after restart: {"flagKey":"smoke-flag","userId":"user-123","enabled":false,"reason":"BUCKET_EXCLUDED","bucket":76,"rolloutPercentage":20}
+OK: restart.bucket = 76
+OK: restart.enabled = false
+OK: restart.reason = BUCKET_EXCLUDED
+```
+
+`down` (volume korunur) + `up -d` sonrası aynı sonuç:
+
+```text
+$ docker compose -p switchboard-smoke down
+ Container switchboard-smoke-switchboard-1 Stopping
+ Container switchboard-smoke-switchboard-1 Stopped
+ Container switchboard-smoke-switchboard-1 Removing
+ Container switchboard-smoke-switchboard-1 Removed
+ Network switchboard-smoke_default Removing
+ Network switchboard-smoke_default Removed
+$ docker compose -p switchboard-smoke up -d
+ Network switchboard-smoke_default Creating
+ Network switchboard-smoke_default Created
+ Container switchboard-smoke-switchboard-1 Creating
+ Container switchboard-smoke-switchboard-1 Created
+ Container switchboard-smoke-switchboard-1 Starting
+ Container switchboard-smoke-switchboard-1 Started
+health: {"status":"ok"}
+flag after down/up: {"id":1,"key":"smoke-flag","description":"Docker smoke test","enabled":true,"rolloutPercentage":20,"createdAt":"2026-10-20T14:21:29.914Z","updatedAt":"2026-10-20T14:21:29.914Z"}
+OK: down-up.enabled = true
+OK: down-up.rolloutPercentage = 20
+evaluate after down/up: {"flagKey":"smoke-flag","userId":"user-123","enabled":false,"reason":"BUCKET_EXCLUDED","bucket":76,"rolloutPercentage":20}
+OK: down-up.bucket = 76
+OK: down-up.enabled = false
+OK: down-up.reason = BUCKET_EXCLUDED
 ```
 
 ## 6. Docker smoke testi
 
-```bash
-# TODO: docker compose up/build/health/restart/down çıktıları
+`npm run smoke` (temiz `down -v`, build, health, flag, restart, down/up ve
+tekrar `down -v`). Build katman logları kısaltıldı; uygulama çıktısı birebir:
+
+```text
+> switchboard@0.1.0 smoke
+> bash scripts/smoke-docker.sh
+
+Switchboard Docker smoke test
+Project: switchboard-smoke
+Base URL: http://127.0.0.1:3101
+Token: smoke-only (smoke-token)
+
+== 1. Clean start ==
+$ docker compose -p switchboard-smoke down -v
+time="2026-10-20T16:21:25+02:00" level=warning msg="Warning: No resource found to remove for project \"switchboard-smoke\"."
+
+== 2. Build and start ==
+$ docker compose -p switchboard-smoke up -d --build
+ Image switchboard-smoke-switchboard Building
+ Image switchboard-smoke-switchboard Built
+ Network switchboard-smoke_default Creating
+ Volume switchboard-smoke_switchboard-data Creating
+ Volume switchboard-smoke_switchboard-data Created
+ Network switchboard-smoke_default Created
+ Container switchboard-smoke-switchboard-1 Creating
+ Container switchboard-smoke-switchboard-1 Created
+ Container switchboard-smoke-switchboard-1 Starting
+ Container switchboard-smoke-switchboard-1 Started
+
+== 3. Wait for health ==
+health: {"status":"ok"}
+
+== 4. Create flag ==
+create: {"id":1,"key":"smoke-flag","description":"Docker smoke test","enabled":true,"rolloutPercentage":20,"createdAt":"2026-10-20T14:21:29.914Z","updatedAt":"2026-10-20T14:21:29.914Z"}
+OK: create.key = smoke-flag
+OK: create.enabled = true
+OK: create.rolloutPercentage = 20
+
+== 5. Evaluate user-123 ==
+evaluate: {"flagKey":"smoke-flag","userId":"user-123","enabled":false,"reason":"BUCKET_EXCLUDED","bucket":76,"rolloutPercentage":20}
+bucket=76 enabled=false reason=BUCKET_EXCLUDED
+
+== 6. Restart and re-evaluate ==
+$ docker compose -p switchboard-smoke restart
+ Container switchboard-smoke-switchboard-1 Restarting
+ Container switchboard-smoke-switchboard-1 Started
+health: {"status":"ok"}
+flag after restart: {"id":1,"key":"smoke-flag","description":"Docker smoke test","enabled":true,"rolloutPercentage":20,"createdAt":"2026-10-20T14:21:29.914Z","updatedAt":"2026-10-20T14:21:29.914Z"}
+OK: restart.enabled = true
+OK: restart.rolloutPercentage = 20
+evaluate after restart: {"flagKey":"smoke-flag","userId":"user-123","enabled":false,"reason":"BUCKET_EXCLUDED","bucket":76,"rolloutPercentage":20}
+OK: restart.bucket = 76
+OK: restart.enabled = false
+OK: restart.reason = BUCKET_EXCLUDED
+
+== 7. down (volume kept) + up and re-evaluate ==
+$ docker compose -p switchboard-smoke down
+ Container switchboard-smoke-switchboard-1 Stopping
+ Container switchboard-smoke-switchboard-1 Stopped
+ Container switchboard-smoke-switchboard-1 Removing
+ Container switchboard-smoke-switchboard-1 Removed
+ Network switchboard-smoke_default Removing
+ Network switchboard-smoke_default Removed
+$ docker compose -p switchboard-smoke up -d
+ Network switchboard-smoke_default Creating
+ Network switchboard-smoke_default Created
+ Container switchboard-smoke-switchboard-1 Creating
+ Container switchboard-smoke-switchboard-1 Created
+ Container switchboard-smoke-switchboard-1 Starting
+ Container switchboard-smoke-switchboard-1 Started
+health: {"status":"ok"}
+flag after down/up: {"id":1,"key":"smoke-flag","description":"Docker smoke test","enabled":true,"rolloutPercentage":20,"createdAt":"2026-10-20T14:21:29.914Z","updatedAt":"2026-10-20T14:21:29.914Z"}
+OK: down-up.enabled = true
+OK: down-up.rolloutPercentage = 20
+evaluate after down/up: {"flagKey":"smoke-flag","userId":"user-123","enabled":false,"reason":"BUCKET_EXCLUDED","bucket":76,"rolloutPercentage":20}
+OK: down-up.bucket = 76
+OK: down-up.enabled = false
+OK: down-up.reason = BUCKET_EXCLUDED
+
+Smoke test passed: flag and evaluation survived restart and down/up.
+
+== 8. Clean up (down -v via EXIT trap) ==
+
+$ docker compose -p switchboard-smoke down -v
+ Container switchboard-smoke-switchboard-1 Stopping
+ Container switchboard-smoke-switchboard-1 Stopped
+ Container switchboard-smoke-switchboard-1 Removing
+ Container switchboard-smoke-switchboard-1 Removed
+ Network switchboard-smoke_default Removing
+ Volume switchboard-smoke_switchboard-data Removing
+ Volume switchboard-smoke_switchboard-data Removed
+ Network switchboard-smoke_default Removed
+```
+
+Healthcheck ve non-root kullanıcı:
+
+```text
+$ docker compose -p switchboard-smoke ps
+NAME                              IMAGE                           COMMAND                  SERVICE       CREATED         STATUS                   PORTS
+switchboard-smoke-switchboard-1   switchboard-smoke-switchboard   "docker-entrypoint.s…"   switchboard   6 seconds ago   Up 6 seconds (healthy)   0.0.0.0:3101->3000/tcp, [::]:3101->3000/tcp
+$ docker compose -p switchboard-smoke exec switchboard id
+uid=1000(node) gid=1000(node) groups=1000(node)
+$ docker image inspect switchboard-smoke-switchboard --format '{{.Config.User}}'
+node
+```
+
+`ADMIN_TOKEN` verilmeden compose net hata veriyor (gizli varsayılan token yok):
+
+```text
+$ env -u ADMIN_TOKEN docker compose --env-file /dev/null config
+error while interpolating services.switchboard.environment.ADMIN_TOKEN: required variable ADMIN_TOKEN is missing a value: ADMIN_TOKEN is required. Set it in .env or the environment.
+exit=1
+```
+
+`down -v` sonrası volume kalmadı ve yeni başlangıç boş veritabanıyla açıldı:
+
+```text
+$ docker volume ls --filter name=switchboard-smoke
+DRIVER    VOLUME NAME
+$ curl -s -H 'Authorization: Bearer smoke-token' http://127.0.0.1:3101/api/flags
+{"flags":[]}
 ```
 
 ## 7. Demo video

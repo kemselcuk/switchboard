@@ -1,0 +1,17 @@
+node_modules
+data
+coverage
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+test
+examples
+scripts
+docs
+assets
+demo
+compose.yaml
