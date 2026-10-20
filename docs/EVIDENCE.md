@@ -33,6 +33,51 @@ kanıtlarını içerir. Henüz doldurulmamış bölümler `TODO` olarak kalır.
 ℹ fail 0
 ```
 
+Yönetim API'si, auth ve hata zarfı testleri (Görev 020):
+
+```text
+✔ admin routes reject a request without a token
+✔ admin routes reject a wrong token
+✔ admin routes reject a token of a different length
+✔ admin routes reject a malformed authorization header
+✔ auth runs before body validation
+✔ admin routes accept the configured bearer token
+✔ admin routes reject every token when no token is configured
+✔ health check stays public
+✔ POST /api/flags creates a flag and returns the planned fields
+✔ POST /api/flags applies defaults for optional fields
+✔ POST /api/flags rejects a duplicate key
+✔ POST /api/flags rejects invalid keys
+✔ POST /api/flags rejects invalid rollout percentages
+✔ POST /api/flags rejects invalid enabled and description values
+✔ POST /api/flags rejects unknown body fields
+✔ GET /api/flags lists flags in creation order
+✔ GET /api/flags/:key returns a flag or FLAG_NOT_FOUND
+✔ PATCH /api/flags/:key updates only the provided fields
+✔ PATCH /api/flags/:key rejects empty and unknown fields
+✔ PATCH /api/flags/:key rejects an unknown key
+✔ unknown routes return the NOT_FOUND envelope
+✔ repository SQLite errors become 503 without internal details
+✔ unexpected errors become 500 without internal details
+
+ℹ tests 36
+ℹ pass 36
+ℹ fail 0
+```
+
+Geçici DB ile sunucu uçtan uca kontrolü (`PORT=4317`, yerel test token'ı):
+
+```text
+health: {"status":"ok"}
+unauthorized: 401
+{"error":{"code":"UNAUTHORIZED","message":"Missing or invalid bearer token"}}
+create: 201
+{"id":1,"key":"server-check","description":"wiring","enabled":true,"rolloutPercentage":20,"createdAt":"2026-10-20T14:07:27.807Z","updatedAt":"2026-10-20T14:07:27.807Z"}
+patch: 200
+{"id":1,"key":"server-check","description":"wiring","enabled":true,"rolloutPercentage":40,"createdAt":"2026-10-20T14:07:27.807Z","updatedAt":"2026-10-20T14:07:27.817Z"}
+token in log: no
+```
+
 `ADMIN_TOKEN` olmadan sunucu başlatma kontrolü:
 
 ```text

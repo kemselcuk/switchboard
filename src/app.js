@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import { openDatabase } from './db.js';
+import { ERROR_CODES, normalizeError, sendError } from './errors.js';
 import { createRepository } from './flags/repository.js';
+import { flagRoutes } from './flags/routes.js';
 
 const REDACT_PATHS = ['req.headers.authorization'];
 
@@ -29,10 +31,17 @@ export function buildApp({
   dbPath = ':memory:',
   logger = false,
   repository,
+  adminToken,
 } = {}) {
   const app = Fastify({
     logger: buildLoggerOptions(logger),
     bodyLimit: 16 * 1024,
+    ajv: {
+      customOptions: {
+        coerceTypes: false,
+        removeAdditional: false,
+      },
+    },
   });
 
   let db = null;
@@ -62,7 +71,22 @@ export function buildApp({
     });
   }
 
+  app.setErrorHandler((error, request, reply) => {
+    const { statusCode, code, message } = normalizeError(error);
+
+    return sendError(reply, statusCode, code, message);
+  });
+
+  app.setNotFoundHandler((request, reply) => sendError(
+    reply,
+    404,
+    ERROR_CODES.NOT_FOUND,
+    'Route not found',
+  ));
+
   app.get('/healthz', async () => ({ status: 'ok' }));
+
+  app.register(flagRoutes, { adminToken });
 
   return app;
 }

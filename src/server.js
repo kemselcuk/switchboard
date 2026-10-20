@@ -1,6 +1,8 @@
 import { buildApp } from './app.js';
 
-if (!process.env.ADMIN_TOKEN) {
+const adminToken = process.env.ADMIN_TOKEN;
+
+if (!adminToken) {
   console.error(
     'ADMIN_TOKEN is required. Copy .env.example to .env and set a token.',
   );
@@ -12,7 +14,11 @@ const host = process.env.HOST ?? '127.0.0.1';
 const dbPath = process.env.DB_PATH ?? './data/switchboard.db';
 const logLevel = process.env.LOG_LEVEL ?? 'info';
 
-const app = buildApp({ dbPath, logger: { level: logLevel } });
+const app = buildApp({
+  dbPath,
+  logger: { level: logLevel },
+  adminToken,
+});
 
 let shuttingDown = false;
 
