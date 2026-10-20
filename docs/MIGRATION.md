@@ -77,8 +77,8 @@ Use the returned `key` with `/ofrep/v1/evaluate/flags/:flag`.
 The old SQLite file is untouched. To roll back:
 
 1. Stop the v2 stack.
-2. Set `SWITCHBOARD_V2=false` (or unset `DATABASE_URL`).
-3. Run `npm start` with the original `DB_PATH`.
+2. Set `SWITCHBOARD_V2=false` and run `npm start` with the original `DB_PATH`.
+   Do not set `DATABASE_URL`; when it is present, v2 takes precedence.
 
 No destructive SQLite migration is performed.
 

@@ -70,6 +70,19 @@ test('returns FLAG_NOT_FOUND for an unknown OFREP flag', async (t) => {
   });
 });
 
+test('rejects a non-string targetingKey', async (t) => {
+  const { app, key } = await setup(t);
+  const response = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/new-checkout',
+    headers: { 'x-api-key': key },
+    payload: { context: { targetingKey: 123 } },
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.json().errorCode, 'INVALID_CONTEXT');
+});
+
 test('returns DISABLED when the flag is off', async (t) => {
   const { app, key } = await setup(t);
 

@@ -3,10 +3,10 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: switchboard
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-switchboard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required. Set it in .env or the environment.}
       POSTGRES_DB: switchboard
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - switchboard-pg-data:/var/lib/postgresql/data
     healthcheck:
@@ -24,10 +24,10 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "${PORT:-3000}:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
     environment:
       ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN is required. Set it in .env or the environment.}
-      DATABASE_URL: postgres://switchboard:${POSTGRES_PASSWORD:-switchboard}@postgres:5432/switchboard
+      DATABASE_URL: postgres://switchboard:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required.}@postgres:5432/switchboard
       HOST: 0.0.0.0
       LOG_LEVEL: ${LOG_LEVEL:-info}
     healthcheck:

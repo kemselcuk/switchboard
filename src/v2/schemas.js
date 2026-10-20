@@ -83,6 +83,9 @@ export const ofrepEvaluationBody = {
     context: {
       type: 'object',
       additionalProperties: true,
+      properties: {
+        targetingKey: { type: 'string' },
+      },
     },
   },
 };

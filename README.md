@@ -38,7 +38,7 @@ audit/RBAC, browser SDK, and streaming are planned for later versions.
 
 ```bash
 cp .env.example .env
-# Change ADMIN_TOKEN (and optionally POSTGRES_PASSWORD) in .env
+# Change ADMIN_TOKEN and POSTGRES_PASSWORD in .env
 docker compose up --build
 ```
 
@@ -51,7 +51,8 @@ The stack starts Postgres, runs migrations, and serves:
 - OFREP: http://localhost:3000/ofrep/v1
 
 `docker compose down` keeps the Postgres volume. `docker compose down -v`
-removes it.
+removes it. Both ports bind to `127.0.0.1` by default; override `BIND_ADDRESS`
+or `POSTGRES_BIND` only when external access is intended.
 
 ### Local: v2 with SQLite
 
