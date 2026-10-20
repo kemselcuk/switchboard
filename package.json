@@ -1,0 +1,21 @@
+{
+  "name": "switchboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Small deterministic feature flag service",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node --env-file=.env src/server.js",
+    "dev": "node --watch --env-file=.env src/server.js",
+    "test": "node --test --test-reporter=spec",
+    "smoke": "bash scripts/smoke-docker.sh"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.7"
+  }
+}
