@@ -114,7 +114,7 @@ ADMIN_TOKEN is required. Copy .env.example to .env and set a token.
 
 ## 2. Demo UI, örnek istemci ve demo script (Görev 040)
 
-Statik dosyalar geçici bir veritabanıyla çalışan yerel sunucudan (`PORT=3000`)
+Statik dosyalar geçici bir veritabanıyla çalışan yerel sunucudan (`PORT=3100`)
 istendi:
 
 ```text
@@ -144,50 +144,50 @@ Görev 040 sonrası `npm test`:
 ℹ fail 0
 ```
 
-`npm run demo` (yerel sunucu `http://127.0.0.1:3000`, geçici DB):
+`npm run demo` (yerel sunucu `http://127.0.0.1:3100`, geçici DB):
 
 ```text
 > switchboard@0.1.0 demo
 > node scripts/demo.mjs
 
 Switchboard demo — %20 → %40 rollout
-Servis: http://127.0.0.1:3000
+Servis: http://127.0.0.1:3100
 Flag: demo-checkout (enabled=true, rollout=20%)
 
 USER          BUCKET  %20     %40     DURUM
-------------  ------  ------  ------  -------
+------------  ------  ------  ------  -----------
 demo-user-01  4       açık    açık    korundu
 demo-user-02  48      kapalı  kapalı  kapalı
-demo-user-03  4       açık    açık    korundu
 demo-user-04  70      kapalı  kapalı  kapalı
 demo-user-05  67      kapalı  kapalı  kapalı
 demo-user-06  93      kapalı  kapalı  kapalı
-demo-user-07  89      kapalı  kapalı  kapalı
-demo-user-08  62      kapalı  kapalı  kapalı
 demo-user-09  17      açık    açık    korundu
-demo-user-10  44      kapalı  kapalı  kapalı
-demo-user-11  46      kapalı  kapalı  kapalı
-demo-user-12  85      kapalı  kapalı  kapalı
+demo-user-14  37      kapalı  açık    yeni açıldı
+demo-user-17  28      kapalı  açık    yeni açıldı
+demo-user-19  15      açık    açık    korundu
+demo-user-21  21      kapalı  açık    yeni açıldı
+demo-user-25  3       açık    açık    korundu
+demo-user-33  35      kapalı  açık    yeni açıldı
 
-Özet: %20'de 3/12 açık, %40'ta 3/12 açık, 3 korundu, 0 yeni açıldı.
+Özet: %20'de 4/12 açık, %40'ta 8/12 açık, 4 korundu, 4 yeni açıldı.
 Demo sonunda flag %40 rollout ile açık bırakıldı.
 ```
 
 Aynı script ikinci kez çalıştırıldığında mevcut `demo-checkout` flag'ini
-`PATCH /api/flags/demo-checkout` ile güncelledi ve aynı özeti üretti.
+`PATCH /api/flags/demo-checkout` ile güncelledi ve aynı sonucu üretti.
 
-`new-checkout` flag'i (`enabled=true`, `rolloutPercentage=40`) ile örnek
+`demo-checkout` flag'i (`enabled=true`, `rolloutPercentage=40`) ile örnek
 istemci:
 
 ```text
-$ node examples/client.mjs --url http://127.0.0.1:3000 --flag new-checkout \
-    --users user-0000,user-0005,user-123
+$ node examples/client.mjs --url http://127.0.0.1:3100 --flag demo-checkout \
+    --users demo-user-01,demo-user-14,demo-user-02
 
-USER       ENABLED  REASON           BUCKET  ROLLOUT
----------  -------  ---------------  ------  -------
-user-0000  true     BUCKET_INCLUDED  3       40%
-user-0005  true     BUCKET_INCLUDED  30      40%
-user-123   false    BUCKET_EXCLUDED  65      40%
+USER          ENABLED  REASON           BUCKET  ROLLOUT
+------------  -------  ---------------  ------  -------
+demo-user-01  true     BUCKET_INCLUDED  4       40%
+demo-user-14  true     BUCKET_INCLUDED  37      40%
+demo-user-02  false    BUCKET_EXCLUDED  48      40%
 exit=0
 ```
 
@@ -242,10 +242,11 @@ Hata: http://127.0.0.1:4399 adresine ulaşılamadı: fetch failed
 exit=1
 ```
 
-Not: Sabit 12 demo kullanıcısının `demo-checkout` bucket'ları 4, 48, 4, 70,
-67, 93, 89, 62, 17, 44, 46 ve 85'tir. Bu örneklemde %20'de açık olan 3
-kullanıcı %40'ta korunur; 20–39 aralığında bucket olmadığı için yeni açılan
-kullanıcı çıkmaz. Deterministik davranış gereği sonuç budur.
+Not: 12 demo kullanıcısı, `demo-checkout` için 4/4/4 dağılımı verecek şekilde
+seçildi: %20'de 4 açık, %40'ta 8 açık (4'ü korundu, 4'ü yeni açıldı), 4'ü
+kapalı. Bucket'lar 4, 48, 70, 67, 93, 17, 37, 28, 15, 21, 3 ve 35'tir.
+Küçük örneklemde tam yüzde beklenmez; bu set deterministik bir kanıt için
+kullanılır.
 
 ## 3. Determinizm ve monotonluk
 

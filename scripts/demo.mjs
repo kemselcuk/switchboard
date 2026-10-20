@@ -5,10 +5,22 @@ const BASE_URL = (process.env.BASE_URL ?? 'http://127.0.0.1:3000').replace(
 );
 const FLAG_KEY = 'demo-checkout';
 const FLAG_DESCRIPTION = 'Demo: 20 → 40 rollout karşılaştırması';
-const DEMO_USERS = Array.from(
-  { length: 12 },
-  (_, index) => `demo-user-${String(index + 1).padStart(2, '0')}`,
-);
+// Buckets for demo-checkout: 4,48,70,67,93,17,37,28,15,21,3,35.
+// 4 open at 20%, 4 newly open at 40%, 4 stay closed.
+const DEMO_USERS = [
+  'demo-user-01',
+  'demo-user-02',
+  'demo-user-04',
+  'demo-user-05',
+  'demo-user-06',
+  'demo-user-09',
+  'demo-user-14',
+  'demo-user-17',
+  'demo-user-19',
+  'demo-user-21',
+  'demo-user-25',
+  'demo-user-33',
+];
 
 async function api(path, { method = 'GET', body, auth = true } = {}) {
   const headers = { accept: 'application/json' };
