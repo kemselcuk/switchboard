@@ -146,6 +146,17 @@ export function createFlagRepository(db) {
           throw notFound('FLAG_NOT_FOUND', 'Flag not found');
         }
 
+        const config = await trx
+          .selectFrom('flag_configs')
+          .select('id')
+          .where('flag_id', '=', flag.id)
+          .where('environment_id', '=', environmentId)
+          .executeTakeFirst();
+
+        if (!config) {
+          throw notFound('FLAG_NOT_FOUND', 'Flag not found in this environment');
+        }
+
         if (description !== undefined) {
           await trx
             .updateTable('flags')

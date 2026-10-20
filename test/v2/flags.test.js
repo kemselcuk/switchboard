@@ -120,6 +120,33 @@ test('isolates flags by project', async (t) => {
   assert.equal(beta.json().error.code, 'FLAG_NOT_FOUND');
 });
 
+test('does not mutate another environment on a failed description-only PATCH', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo', 'production', 'Production');
+  await createEnvironment(app, 'demo', 'staging', 'Staging');
+  await createFlag(app, 'demo', 'production', {
+    description: 'production description',
+  });
+
+  const failed = await app.inject({
+    method: 'PATCH',
+    url: '/api/v1/projects/demo/environments/staging/flags/new-checkout',
+    headers: AUTHORIZATION,
+    payload: { description: 'should not leak' },
+  });
+  const production = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/demo/environments/production/flags/new-checkout',
+    headers: AUTHORIZATION,
+  });
+
+  assert.equal(failed.statusCode, 404);
+  assert.equal(failed.json().error.code, 'FLAG_NOT_FOUND');
+  assert.equal(production.statusCode, 200);
+  assert.equal(production.json().description, 'production description');
+});
+
 test('validates rollout precision and unknown flags', async (t) => {
   const { app } = await createV2App(t);
   await createProject(app);
