@@ -529,3 +529,91 @@ $ git status --short
 ```
 
 Release tag: `v1.0.0` (code release). English documentation is on `main` after the release commit.
+
+## 9. v2 expansion evidence
+
+The v2 work keeps the v1 API available and adds projects, environments, API
+keys, OFREP and the Node/OpenFeature clients.
+
+### Local test suite
+
+```text
+npm test
+ℹ tests 91
+ℹ pass 90
+ℹ fail 0
+ℹ skipped 1
+```
+
+The skipped test is the Postgres integration test, which runs when
+`DATABASE_URL` is set.
+
+### Postgres integration
+
+```text
+DATABASE_URL=postgres://postgres:switchboard@127.0.0.1:55432/switchboard npm run test:db
+✔ Postgres migrations and v2 evaluation flow
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0
+```
+
+### OFREP contract tests
+
+```text
+npm run test:contract
+✔ vendored OFREP contract exposes the required core paths
+✔ single OFREP response matches the official schema
+✔ bulk OFREP response matches the official schema
+✔ OFREP not-found response matches the official schema
+ℹ tests 4
+ℹ pass 4
+```
+
+### SDK and OpenFeature provider
+
+```text
+npm run test:workspaces
+@switchboard/openfeature-provider: tests 3, pass 3
+@switchboard/sdk: tests 5, pass 5
+```
+
+### Two-service v2 demo
+
+```text
+npm run demo:v2
+Project: demo
+Environment: production
+Flag: new-checkout (40%)
+{"service":"service-a","transport":"sdk","flag":"new-checkout","user":"demo-user-07","enabled":true,"reason":"SPLIT","errorCode":null}
+{"service":"service-b","transport":"openfeature","flag":"new-checkout","user":"demo-user-07","enabled":true,"reason":"SPLIT","errorCode":null}
+```
+
+### SQLite → Postgres migration
+
+```text
+npm run migrate:legacy
+Legacy migration complete: 1 migrated, 0 skipped, 1 total.
+```
+
+The migrated legacy flag was then read through `/api/flags`:
+
+```json
+{"flags":[{"id":"2d55ada0-50a5-4cfd-b2b9-9468f366c9a6","key":"cli-migrated","description":"","enabled":true,"rolloutPercentage":37,"createdAt":"2026-10-20T17:12:44.234Z","updatedAt":"2026-10-20T17:12:44.234Z"}]}
+```
+
+### Docker Compose v2 smoke
+
+`npm run smoke` builds the Postgres-backed stack, waits for health, creates a
+legacy flag, evaluates it, restarts the stack, runs `down`/`up`, and verifies
+the same bucket/result. Result:
+
+```text
+Smoke test passed: flag and evaluation survived restart and down/up.
+```
+
+### v2 UI
+
+`GET /v2.html` is covered by the static tests; it provides project,
+environment, flag, API-key and OFREP evaluation forms. The admin token and API
+key are stored in browser storage only, never in HTML.

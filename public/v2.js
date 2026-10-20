@@ -31,11 +31,19 @@ function setStatus(id, message, kind = 'info') {
   node.dataset.kind = kind;
 }
 
-async function request(path, { method = 'GET', body, admin = true } = {}) {
+async function request(path, {
+  method = 'GET',
+  body,
+  admin = true,
+  apiKey,
+} = {}) {
   const headers = { accept: 'application/json' };
 
   if (body !== undefined) {
     headers['content-type'] = 'application/json';
+  }
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
   }
   if (admin) {
     const token = readToken();
@@ -218,6 +226,7 @@ function bindEvents() {
       {
         method: 'POST',
         admin: false,
+        apiKey: key,
         body: { context: { targetingKey: userId } },
       },
     );
