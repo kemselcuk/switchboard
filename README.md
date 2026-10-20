@@ -41,7 +41,8 @@ docker compose up --build
 
 The stack starts Postgres, runs migrations, and serves:
 
-- Demo/legacy UI: http://localhost:3000
+- Legacy demo UI: http://localhost:3000
+- v2 projects/OFREP demo: http://localhost:3000/v2.html
 - Health: http://localhost:3000/healthz
 - Management API: http://localhost:3000/api/v1
 - OFREP: http://localhost:3000/ofrep/v1
@@ -259,7 +260,7 @@ npm run test:workspaces # SDK/provider build + tests
 npm run smoke         # Docker Compose + Postgres smoke test
 ```
 
-Current local suite: 90 tests, with the Postgres integration test skipped when
+Current local suite: 91 tests, with the Postgres integration test skipped when
 `DATABASE_URL` is not set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)

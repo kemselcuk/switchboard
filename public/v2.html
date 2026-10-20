@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Switchboard v2 — Projects and OFREP</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+      .v2-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+      .v2-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: end; }
+      .v2-key { display: block; overflow-wrap: anywhere; padding: .75rem; border-radius: .5rem; background: #0f172a; color: #e2e8f0; }
+      .v2-result { margin-top: 1rem; padding: 1rem; border-radius: .75rem; background: #eff6ff; border: 1px solid #bfdbfe; }
+      .v2-result[hidden] { display: none; }
+    </style>
+    <script src="/v2.js" defer></script>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero__copy">
+        <p class="eyebrow">Switchboard v2</p>
+        <h1>Projects, environments and OFREP</h1>
+        <p class="lede">
+          Create a project and environment, issue a server API key, and evaluate
+          a boolean flag through the OpenFeature Remote Evaluation Protocol.
+        </p>
+      </div>
+      <p class="health" role="status" aria-live="polite">
+        <span class="health__dot" aria-hidden="true"></span>
+        <span id="health-status" data-state="pending">Checking…</span>
+      </p>
+    </header>
+
+    <main>
+      <section class="panel" aria-labelledby="token-title">
+        <div class="panel__heading">
+          <h2 id="token-title">Admin connection</h2>
+          <p class="panel__hint">The token is kept in sessionStorage only.</p>
+        </div>
+        <form id="token-form" class="inline-form">
+          <label class="field">
+            <span>Admin token</span>
+            <input id="admin-token" type="password" autocomplete="off" spellcheck="false" placeholder="ADMIN_TOKEN">
+          </label>
+          <button type="submit" class="button">Save</button>
+        </form>
+        <p id="token-status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <div class="v2-grid">
+        <section class="panel" aria-labelledby="project-title">
+          <div class="panel__heading">
+            <h2 id="project-title">Project</h2>
+            <p class="panel__hint">A project contains one or more environments.</p>
+          </div>
+          <form id="project-form" class="stack">
+            <label class="field"><span>Key</span><input id="project-key" required pattern="[a-z0-9][a-z0-9._-]{0,63}" placeholder="checkout"></label>
+            <label class="field"><span>Name</span><input id="project-name" required maxlength="80" placeholder="Checkout"></label>
+            <button type="submit" class="button">Create project</button>
+          </form>
+          <p id="project-status" class="status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="panel" aria-labelledby="environment-title">
+          <div class="panel__heading">
+            <h2 id="environment-title">Environment</h2>
+            <p class="panel__hint">Examples: production, staging.</p>
+          </div>
+          <form id="environment-form" class="stack">
+            <label class="field"><span>Project key</span><input id="env-project" required value="demo" placeholder="checkout"></label>
+            <label class="field"><span>Environment key</span><input id="env-key" required pattern="[a-z0-9][a-z0-9._-]{0,63}" placeholder="production"></label>
+            <label class="field"><span>Environment name</span><input id="env-name" required maxlength="80" value="Production"></label>
+            <button type="submit" class="button">Create environment</button>
+          </form>
+          <p id="environment-status" class="status" role="status" aria-live="polite"></p>
+        </section>
+      </div>
+
+      <div class="v2-grid">
+        <section class="panel" aria-labelledby="flag-title">
+          <div class="panel__heading">
+            <h2 id="flag-title">Boolean flag</h2>
+            <p class="panel__hint">Create or update a flag in an environment.</p>
+          </div>
+          <form id="flag-form" class="stack">
+            <label class="field"><span>Project key</span><input id="flag-project" required value="demo"></label>
+            <label class="field"><span>Environment key</span><input id="flag-env" required value="production"></label>
+            <label class="field"><span>Flag key</span><input id="flag-key" required pattern="[a-z0-9][a-z0-9._-]{0,63}" placeholder="new-checkout"></label>
+            <label class="field"><span>Description</span><input id="flag-description" maxlength="280" placeholder="New checkout flow"></label>
+            <div class="form-row">
+              <label class="check-field"><input id="flag-enabled" type="checkbox" checked><span>Enabled</span></label>
+              <label class="field field--compact"><span>Rollout (%)</span><input id="flag-rollout" type="number" min="0" max="100" step="0.001" value="40"></label>
+            </div>
+            <button type="submit" class="button">Create flag</button>
+          </form>
+          <p id="flag-status" class="status" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="panel" aria-labelledby="key-title">
+          <div class="panel__heading">
+            <h2 id="key-title">Environment API key</h2>
+            <p class="panel__hint">The secret is shown once. Store it securely.</p>
+          </div>
+          <form id="key-form" class="stack">
+            <label class="field"><span>Project key</span><input id="key-project" required value="demo"></label>
+            <label class="field"><span>Environment key</span><input id="key-env" required value="production"></label>
+            <label class="field"><span>Key name</span><input id="key-name" required maxlength="80" value="demo server"></label>
+            <button type="submit" class="button">Create API key</button>
+          </form>
+          <p id="key-status" class="status" role="status" aria-live="polite"></p>
+          <code id="api-key-secret" class="v2-key" hidden></code>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="evaluate-title">
+        <div class="panel__heading">
+          <h2 id="evaluate-title">Evaluate via OFREP</h2>
+          <p class="panel__hint">The evaluation endpoint requires an environment API key.</p>
+        </div>
+        <form id="evaluate-form" class="stack">
+          <label class="field"><span>API key</span><input id="evaluate-key" required autocomplete="off" spellcheck="false" placeholder="sb_srv_..."></label>
+          <label class="field"><span>Flag key</span><input id="evaluate-flag" required value="new-checkout"></label>
+          <label class="field"><span>User ID</span><input id="evaluate-user" required value="demo-user-07"></label>
+          <button type="submit" class="button">Evaluate</button>
+        </form>
+        <p id="evaluate-status" class="status" role="status" aria-live="polite"></p>
+        <div id="evaluate-result" class="v2-result" hidden>
+          <dl class="result__grid">
+            <div><dt>Value</dt><dd id="result-value">—</dd></div>
+            <div><dt>Reason</dt><dd id="result-reason">—</dd></div>
+            <div><dt>Variant</dt><dd id="result-variant">—</dd></div>
+            <div><dt>Error</dt><dd id="result-error">—</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <p class="status"><a href="/">Back to the legacy v1 demo</a></p>
+    </main>
+  </body>
+</html>

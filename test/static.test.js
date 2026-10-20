@@ -35,6 +35,17 @@ test('GET / serves the single-page demo', async (t) => {
   assert.equal(response.body.includes('dev-token-change-me'), false);
 });
 
+test('GET /v2.html serves the v2 project and OFREP demo', async (t) => {
+  const app = createApp(t);
+  const response = await app.inject({ method: 'GET', url: '/v2.html' });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers['content-type'], /^text\/html/);
+  assert.equal(response.body.includes('Projects, environments and OFREP'), true);
+  assert.equal(response.body.includes('id="evaluate-form"'), true);
+  assert.equal(response.body.includes(ADMIN_TOKEN), false);
+});
+
 test('GET /app.js serves the demo script without innerHTML user data', async (t) => {
   const app = createApp(t);
   const response = await app.inject({ method: 'GET', url: '/app.js' });
