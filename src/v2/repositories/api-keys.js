@@ -6,13 +6,15 @@ export const API_KEY_CACHE_TTL_MS = 5000;
 
 // One cache per Kysely instance so repositories created separately over the
 // same database (OFREP auth hook, management routes) share their entries.
+// `generation` increments on every invalidation so a lookup that was already
+// in flight cannot re-cache its now-stale row after the invalidation.
 const apiKeyCaches = new WeakMap();
 
 function cacheFor(db) {
   let cache = apiKeyCaches.get(db);
 
   if (!cache) {
-    cache = new Map();
+    cache = { entries: new Map(), generation: 0 };
     apiKeyCaches.set(db, cache);
   }
 
@@ -20,7 +22,26 @@ function cacheFor(db) {
 }
 
 function invalidateApiKeyCache(db) {
-  apiKeyCaches.get(db)?.clear();
+  const cache = apiKeyCaches.get(db);
+
+  if (!cache) {
+    return;
+  }
+
+  cache.entries.clear();
+  cache.generation += 1;
+}
+
+// Drop expired entries so lookups of other prefixes and the touch scan do
+// not have to carry them forever.
+function sweepExpired(cache) {
+  const now = Date.now();
+
+  for (const [prefix, entry] of cache.entries) {
+    if (entry.expiresAt <= now) {
+      cache.entries.delete(prefix);
+    }
+  }
 }
 
 export function hashApiKey(value) {
@@ -134,15 +155,20 @@ export function createApiKeyRepository(db) {
 
   async function findApiKeyByPrefix(prefix) {
     const cache = cacheFor(db);
-    const cached = cache.get(prefix);
 
-    if (cached && cached.expiresAt > Date.now()) {
+    sweepExpired(cache);
+
+    const cached = cache.entries.get(prefix);
+
+    if (cached) {
       return cached.record;
     }
 
-    if (cached) {
-      cache.delete(prefix);
-    }
+    // Capture the generation before the query. A create or revoke that lands
+    // while the query is in flight clears the entries and bumps the
+    // generation; caching the row then would resurrect a stale record past
+    // the invalidation. The caller still receives the row it queried for.
+    const generation = cache.generation;
 
     const row = await db
       .selectFrom('api_keys')
@@ -170,10 +196,12 @@ export function createApiKeyRepository(db) {
 
     // Only found records are cached: unknown prefixes keep hitting the
     // database, so a freshly created key is never shadowed by a miss.
-    cache.set(prefix, {
-      record: row,
-      expiresAt: Date.now() + API_KEY_CACHE_TTL_MS,
-    });
+    if (cache.generation === generation) {
+      cache.entries.set(prefix, {
+        record: row,
+        expiresAt: Date.now() + API_KEY_CACHE_TTL_MS,
+      });
+    }
 
     return row;
   }
@@ -196,14 +224,23 @@ export function createApiKeyRepository(db) {
       .execute();
 
     // Keep cached copies in step with the write so the once-per-minute
-    // throttle still sees the fresh timestamp on the next cache hit.
+    // throttle still sees the fresh timestamp on the next cache hit. Expired
+    // entries are dropped while scanning instead of lingering until their
+    // prefix is looked up again.
     const cache = apiKeyCaches.get(db);
 
     if (!cache) {
       return;
     }
 
-    for (const entry of cache.values()) {
+    const now = Date.now();
+
+    for (const [prefix, entry] of cache.entries) {
+      if (entry.expiresAt <= now) {
+        cache.entries.delete(prefix);
+        continue;
+      }
+
       if (entry.record.key_id === id) {
         entry.record.last_used_at = usedAt;
       }

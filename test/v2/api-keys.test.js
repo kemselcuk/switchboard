@@ -13,8 +13,8 @@ import {
   createV2App,
 } from './helpers.js';
 
-function countSelectFrom(v2) {
-  const original = v2.db.selectFrom.bind(v2.db);
+function countSelectFrom(t, v2) {
+  const original = v2.db.selectFrom;
   const calls = { total: 0, apiKeys: 0 };
 
   v2.db.selectFrom = (...args) => {
@@ -24,10 +24,121 @@ function countSelectFrom(v2) {
       calls.apiKeys += 1;
     }
 
-    return original(...args);
+    return original.apply(v2.db, args);
   };
 
+  t.after(() => {
+    v2.db.selectFrom = original;
+  });
+
   return calls;
+}
+
+function countUpdateTable(t, v2) {
+  const original = v2.db.updateTable;
+  const calls = { total: 0, apiKeys: 0 };
+
+  v2.db.updateTable = (...args) => {
+    calls.total += 1;
+
+    if (args[0] === 'api_keys') {
+      calls.apiKeys += 1;
+    }
+
+    return original.apply(v2.db, args);
+  };
+
+  t.after(() => {
+    v2.db.updateTable = original;
+  });
+
+  return calls;
+}
+
+// A db stub whose first selectFrom(...).executeTakeFirst() stays pending until
+// the test resolves it, while later lookups return the current row. It models
+// a read that started before a revoke and answers after it.
+function createRacingDb() {
+  const liveRow = {
+    key_id: 'key-1',
+    hash: 'a'.repeat(64),
+    type: 'server',
+    revoked_at: null,
+    last_used_at: null,
+    environment_id: 'env-1',
+    environment_key: 'production',
+    environment_name: 'Production',
+    project_id: 'project-1',
+    project_key: 'demo',
+    project_name: 'Demo',
+  };
+  const revokedRow = {
+    ...liveRow,
+    revoked_at: '2026-10-21T00:00:00.000Z',
+  };
+  let currentRow = liveRow;
+  let lookups = 0;
+  let markStarted;
+  let resolveLookup;
+  const started = new Promise((resolve) => {
+    markStarted = resolve;
+  });
+
+  const selectQuery = {
+    innerJoin() {
+      return this;
+    },
+    select() {
+      return this;
+    },
+    where() {
+      return this;
+    },
+    executeTakeFirst() {
+      lookups += 1;
+
+      if (lookups === 1) {
+        markStarted();
+
+        return new Promise((resolve) => {
+          resolveLookup = resolve;
+        });
+      }
+
+      return Promise.resolve(currentRow);
+    },
+  };
+
+  const updateQuery = {
+    set() {
+      return this;
+    },
+    where() {
+      return this;
+    },
+    executeTakeFirst() {
+      return Promise.resolve({ numUpdatedRows: 1 });
+    },
+  };
+
+  return {
+    db: {
+      selectFrom() {
+        return selectQuery;
+      },
+      updateTable() {
+        return updateQuery;
+      },
+    },
+    liveRow,
+    revokedRow,
+    started,
+    resolveLookup: (row) => resolveLookup(row),
+    revoke: () => {
+      currentRow = revokedRow;
+    },
+    lookupCount: () => lookups,
+  };
 }
 
 test('creates a server key once and never lists the secret', async (t) => {
@@ -67,6 +178,14 @@ test('records last use once and throttles repeat writes', async (t) => {
   await createEnvironment(app, 'demo');
   const created = await createApiKey(app, 'demo', 'production');
 
+  // Keep both evaluations inside the one-minute throttle window even though
+  // the wall clock moves while they run.
+  let now = Date.now() + 1000;
+  t.mock.method(Date, 'now', () => now);
+
+  const updates = countUpdateTable(t, v2);
+  const repository = createApiKeyRepository(v2.db);
+
   const evaluate = () => app.inject({
     method: 'POST',
     url: '/ofrep/v1/evaluate/flags/missing',
@@ -76,21 +195,25 @@ test('records last use once and throttles repeat writes', async (t) => {
 
   assert.equal((await evaluate()).statusCode, 404);
 
-  const first = await v2.db
-    .selectFrom('api_keys')
-    .select('last_used_at')
-    .where('id', '=', created.id)
-    .executeTakeFirst();
-  assert.equal(typeof first.last_used_at, 'string');
-
+  now += 100;
   assert.equal((await evaluate()).statusCode, 404);
 
-  const second = await v2.db
+  // Both requests evaluated, but only the first one wrote last_used_at.
+  assert.equal(updates.apiKeys, 1);
+
+  const stored = await v2.db
     .selectFrom('api_keys')
     .select('last_used_at')
     .where('id', '=', created.id)
     .executeTakeFirst();
-  assert.equal(second.last_used_at, first.last_used_at);
+
+  assert.equal(typeof stored.last_used_at, 'string');
+
+  // The cached record carries the same value the touch wrote, so the next
+  // throttled evaluation still sees a fresh timestamp.
+  const cachedAfterUse = await repository.findApiKeyByPrefix(created.prefix);
+
+  assert.equal(cachedAfterUse.last_used_at, stored.last_used_at);
 });
 
 test('revokes an API key and rejects it afterwards', async (t) => {
@@ -148,7 +271,7 @@ test('serves repeat API key prefix lookups from the cache', async (t) => {
   const environment = await createEnvironment(app, 'demo');
   const created = await createApiKey(app, 'demo', 'production');
 
-  const calls = countSelectFrom(v2);
+  const calls = countSelectFrom(t, v2);
   const repository = createApiKeyRepository(v2.db);
 
   const first = await repository.findApiKeyByPrefix(created.prefix);
@@ -209,7 +332,12 @@ test('revoking a key invalidates the cached prefix immediately', async (t) => {
   await createEnvironment(app, 'demo');
   const created = await createApiKey(app, 'demo', 'production');
 
-  const calls = countSelectFrom(v2);
+  // Freeze the clock so the cached entry can never expire during this test:
+  // the fresh read below can only come from invalidation, not the TTL.
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+
+  const calls = countSelectFrom(t, v2);
   const repository = createApiKeyRepository(v2.db);
 
   const cached = await repository.findApiKeyByPrefix(created.prefix);
@@ -231,6 +359,7 @@ test('revoking a key invalidates the cached prefix immediately', async (t) => {
 
   assert.notEqual(reloaded.revoked_at, null);
   assert.equal(calls.apiKeys, 2);
+  assert.equal(Date.now(), now);
 
   const evaluation = await app.inject({
     method: 'POST',
@@ -243,7 +372,7 @@ test('revoking a key invalidates the cached prefix immediately', async (t) => {
   assert.equal(calls.apiKeys, 2);
 });
 
-test('re-reads the prefix once the cache TTL expires', async (t) => {
+test('serves the cached prefix up to the TTL and re-reads at the boundary', async (t) => {
   const { app, v2 } = await createV2App(t);
   await createProject(app);
   await createEnvironment(app, 'demo');
@@ -252,24 +381,65 @@ test('re-reads the prefix once the cache TTL expires', async (t) => {
   let now = Date.now();
   t.mock.method(Date, 'now', () => now);
 
-  const calls = countSelectFrom(v2);
+  const calls = countSelectFrom(t, v2);
   const repository = createApiKeyRepository(v2.db);
 
   assert.equal(
     (await repository.findApiKeyByPrefix(created.prefix)).key_id,
     created.id,
   );
+  assert.equal(calls.apiKeys, 1);
+
+  // One millisecond before the TTL the cached entry is still valid.
+  now += API_KEY_CACHE_TTL_MS - 1;
+
   assert.equal(
     (await repository.findApiKeyByPrefix(created.prefix)).key_id,
     created.id,
   );
   assert.equal(calls.apiKeys, 1);
 
-  now += API_KEY_CACHE_TTL_MS + 1;
+  // At exactly the TTL the entry has expired and the row is queried again.
+  now += 1;
 
   assert.equal(
     (await repository.findApiKeyByPrefix(created.prefix)).key_id,
     created.id,
   );
   assert.equal(calls.apiKeys, 2);
+});
+
+test('does not cache a lookup that raced with a revocation', async () => {
+  const fake = createRacingDb();
+  const repository = createApiKeyRepository(fake.db);
+  const prefix = 'sb_srv_race0000';
+
+  const pending = repository.findApiKeyByPrefix(prefix);
+
+  await fake.started;
+
+  // The revoke and its invalidation land while the lookup is in flight.
+  await repository.revokeApiKey('env-1', 'key-1');
+  fake.revoke();
+  fake.resolveLookup(fake.liveRow);
+
+  const stale = await pending;
+
+  // The caller still gets the row the query returned, even though it is now
+  // stale, but that row must not be stored in the invalidated cache.
+  assert.equal(stale.key_id, 'key-1');
+  assert.equal(stale.revoked_at, null);
+  assert.equal(fake.lookupCount(), 1);
+
+  const reloaded = await repository.findApiKeyByPrefix(prefix);
+
+  assert.equal(reloaded.key_id, 'key-1');
+  assert.equal(reloaded.revoked_at, fake.revokedRow.revoked_at);
+  assert.equal(fake.lookupCount(), 2);
+
+  // Normal caching resumes once the generation is stable again.
+  const cached = await repository.findApiKeyByPrefix(prefix);
+
+  assert.equal(cached.revoked_at, fake.revokedRow.revoked_at);
+  assert.equal(fake.lookupCount(), 2);
 });
