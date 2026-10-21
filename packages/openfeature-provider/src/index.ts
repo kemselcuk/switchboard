@@ -51,7 +51,14 @@ export class SwitchboardProvider implements Provider {
   private readonly client: SwitchboardClient;
 
   constructor(options: SwitchboardProviderOptions) {
-    this.client = new SwitchboardClient(options);
+    this.client = new SwitchboardClient({
+      bulkEvaluation: true,
+      ...options,
+    });
+  }
+
+  async onClose(): Promise<void> {
+    this.client.close();
   }
 
   async resolveBooleanEvaluation(
