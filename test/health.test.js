@@ -1,20 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildApp } from '../src/app.js';
+import { initializeV2Database } from '../src/v2/db.js';
 import { createV2App } from './v2/helpers.js';
 
-test('GET /healthz returns ok', async (t) => {
-  const app = buildApp();
-  t.after(() => app.close());
-
-  const response = await app.inject({ method: 'GET', url: '/healthz' });
-
-  assert.equal(response.statusCode, 200);
-  assert.deepEqual(response.json(), { status: 'ok' });
-});
-
-test('buildApp accepts an injected repository without opening a database', async (t) => {
-  const repository = {
+function stubRepository() {
+  return {
     createFlag() {
       throw new Error('not implemented');
     },
@@ -28,6 +19,20 @@ test('buildApp accepts an injected repository without opening a database', async
       throw new Error('not implemented');
     },
   };
+}
+
+test('GET /healthz returns ok', async (t) => {
+  const app = buildApp();
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'GET', url: '/healthz' });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { status: 'ok' });
+});
+
+test('buildApp accepts an injected repository without opening a database', async (t) => {
+  const repository = stubRepository();
 
   const app = buildApp({ repository });
   t.after(() => app.close());
@@ -39,6 +44,16 @@ test('buildApp accepts an injected repository without opening a database', async
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), { status: 'ok' });
+});
+
+test('GET /readyz reports ready with an injected repository and no owned storage', async (t) => {
+  const app = buildApp({ repository: stubRepository() });
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'GET', url: '/readyz' });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), { status: 'ready' });
 });
 
 test('app.close() closes the owned database', async () => {
@@ -112,4 +127,35 @@ test('GET /readyz returns 503 when v2 storage is unavailable', async (t) => {
   });
   assert.equal(response.body.includes('storage down'), false);
   assert.equal(response.body.includes('health.test.js'), false);
+});
+
+test('GET /readyz times out when v2 storage hangs', async (t) => {
+  const v2 = await initializeV2Database();
+  const app = buildApp({
+    v2,
+    adminToken: 'x',
+    readinessTimeoutMs: 20,
+  });
+  const original = v2.db.getExecutor.bind(v2.db);
+
+  v2.db.getExecutor = () => ({
+    executeQuery: () => new Promise(() => {}),
+  });
+  t.after(async () => {
+    v2.db.getExecutor = original;
+    await app.close();
+  });
+
+  const startedAt = Date.now();
+  const response = await app.inject({ method: 'GET', url: '/readyz' });
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.json(), {
+    error: {
+      code: 'EVALUATION_UNAVAILABLE',
+      message: 'Flag storage is unavailable',
+    },
+  });
+  assert.ok(elapsedMs < 1000, `readiness probe took ${elapsedMs} ms`);
 });

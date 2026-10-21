@@ -5,7 +5,6 @@ import Fastify from 'fastify';
 import { sql } from 'kysely';
 import { openDatabase } from './db.js';
 import {
-  AppError,
   ERROR_CODES,
   normalizeError,
   sendError,
@@ -21,6 +20,27 @@ const REDACT_PATHS = [
   'req.headers["x-api-key"]',
 ];
 const PUBLIC_ROOT = fileURLToPath(new URL('../public', import.meta.url));
+const DEFAULT_READINESS_TIMEOUT_MS = 2000;
+
+async function probeWithTimeout(probe, timeoutMs) {
+  let timer;
+
+  try {
+    await Promise.race([
+      Promise.resolve().then(probe),
+      new Promise((resolve, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error('Readiness probe timed out');
+          error.code = ERROR_CODES.EVALUATION_UNAVAILABLE;
+          reject(error);
+        }, timeoutMs);
+        timer.unref();
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function buildLoggerOptions(logger) {
   if (!logger) {
@@ -49,6 +69,7 @@ export function buildApp({
   repository,
   adminToken,
   v2,
+  readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS,
 } = {}) {
   const app = Fastify({
     logger: buildLoggerOptions(logger),
@@ -116,22 +137,34 @@ export function buildApp({
 
   app.get('/healthz', async () => ({ status: 'ok' }));
 
-  app.get('/readyz', async () => {
+  app.get('/readyz', async (request, reply) => {
+    const probe = v2
+      ? () => sql`select 1`.execute(v2.db)
+      : db
+        ? () => db.prepare('SELECT 1').get()
+        : null;
+
+    // An injected repository owns no storage here, so there is nothing to
+    // probe and the app reports ready without a storage check.
+    if (!probe) {
+      return { status: 'ready' };
+    }
+
     try {
-      if (v2) {
-        await sql`select 1`.execute(v2.db);
-      } else if (db) {
-        db.prepare('SELECT 1').get();
-      }
+      await probeWithTimeout(probe, readinessTimeoutMs);
     } catch (error) {
-      const readinessError = new AppError(
+      request.log.warn({
+        code: typeof error?.code === 'string'
+          ? error.code
+          : ERROR_CODES.EVALUATION_UNAVAILABLE,
+      });
+
+      return sendError(
+        reply,
         503,
         ERROR_CODES.EVALUATION_UNAVAILABLE,
         'Flag storage is unavailable',
       );
-      readinessError.cause = error;
-
-      throw readinessError;
     }
 
     return { status: 'ready' };
