@@ -358,7 +358,8 @@ examples/
 - Server API keys only; browser/client keys and a browser SDK are later work.
 - Single Postgres instance target; flag/config evaluation reads are uncached.
   The only cache is a process-local 5s API-key prefix cache (multi-instance
-  revocation may lag up to 5s); no streaming or rate limiting yet.
+  revocation may lag up to 5s; an in-flight lookup can still complete with the
+  pre-revocation row); no streaming or rate limiting yet.
 - The v1 browser demo and video are in Turkish; the v2 demo video and the v2
   API/docs are in English.
 - Feature flags must not replace authorization.

@@ -153,7 +153,7 @@ Smoke test passed: legacy and v2 flags survived restart and down/up.
 
 `npm run bench` uses a dependency-free load driver (`node:http`, sequential
 requests per connection) against a real locally started server. Baseline
-below was recorded **before** the quick wins (`DURATION=10`, `CONNECTIONS=10`).
+below was recorded **before** the quick wins (`BENCH_DURATION=10`, `BENCH_CONNECTIONS=10`).
 
 ### Baseline — SQLite (before quick wins)
 
@@ -346,7 +346,8 @@ found 0 vulnerabilities
 
 `npm run smoke` was run on the final commit. Docker Compose now healthchecks
 `/readyz`, and the smoke script checks it after the first start, the restart,
-and the down/up cycle:
+and the down/up cycle. Excerpt below (the real run repeats health/readiness for
+each phase and includes Docker build/teardown output that is omitted here):
 
 ```text
 npm run smoke

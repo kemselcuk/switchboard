@@ -232,8 +232,8 @@ evaluation contract or the v2.0 scope boundaries. Task brief:
 |---|---|---|
 | 11.1 | Load-test script + baseline | `npm run bench` prints real single/bulk numbers for SQLite (and Postgres with `DATABASE_URL`); baseline recorded in EVIDENCE before optimization |
 | 11.2 | `/readyz` storage probe | 200 with storage up; 503 `EVALUATION_UNAVAILABLE` on storage failure; `/healthz` stays cheap |
-| 11.3 | `DATABASE_POOL_MAX` | Integer ≥1 configures the Postgres pool; invalid values fall back to the `pg` default |
-| 11.4 | API-key prefix cache | Short-TTL in-memory cache, local invalidation on create/revoke; flag evaluation reads stay uncached (ADR-007 untouched) |
+| 11.3 | `DATABASE_POOL_MAX` | Integer `1..1000` configures the Postgres pool; invalid values fall back to the `pg` default |
+| 11.4 | API-key prefix cache | Short-TTL in-memory cache, local invalidation on create/revoke; flag/config reads stay uncached (ADR-007 applies to them; ADR-023 covers auth lookups) |
 
 Deferred until the benchmark proves a bottleneck: flag-config caching (needs an
 ADR-007 revision), SDK bulk/ETag usage, rate limiting, metrics, and the v2.1

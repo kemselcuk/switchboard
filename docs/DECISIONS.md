@@ -378,8 +378,9 @@ reads stay uncached; ADR-007 remains in force for them.
 
 **Consequences:**
 - One fewer DB query per evaluation.
-- Revocation is immediate in-process, including for in-flight lookups, but
-  multi-instance deployments may serve a revoked key for up to 5 seconds.
+- Revocation invalidates the local cache immediately; a lookup already in
+  flight may still return its pre-revocation row to that request.
+- Multi-instance deployments may serve a revoked key for up to 5 seconds.
 - The cache is process-local and disappears on restart.
 - Newly created keys are never shadowed by a negative cache.
 - Expired entries no longer accumulate indefinitely.

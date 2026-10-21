@@ -24,8 +24,8 @@ self-hosted service. Read `AGENTS.md`, `docs/EXPANSION_PLAN.md`, and
 3. **P6 pool sizing**: `DATABASE_POOL_MAX` (integer, ≥1) configures the
    Postgres pool; default stays the `pg` default.
 4. **P2 API-key cache**: in-memory prefix cache with a short TTL plus local
-   invalidation on create/revoke. Flag evaluation reads stay uncached
-   (ADR-007 is untouched).
+   invalidation on create/revoke. Flag/config evaluation reads stay uncached
+   (ADR-007 applies to them; ADR-023 covers authentication lookups).
 
 ## Out of scope
 
@@ -70,15 +70,15 @@ Implemented and landed on `main`:
   missing or invalid values keep the `pg` default.
 - `45f65de` — 5-second in-memory API-key prefix cache with local invalidation
   on create/revoke; only found records are cached, and flag-config reads stay
-  uncached (ADR-007 untouched).
+  uncached (ADR-007 applies to flag/config reads; ADR-023 covers auth lookups).
 
 Evidence from the recording run (`docs/EVIDENCE.md`):
 
 - `npm test`: 122 tests, 119 pass, 3 skipped (the Postgres tests without
   `DATABASE_URL`), 0 fail (final state after review fixes).
-- SQLite, `DURATION=10`, `CONNECTIONS=10`: single-flag 6784.3 → 7467.7 req/s;
+- SQLite, `BENCH_DURATION=10`, `BENCH_CONNECTIONS=10`: single-flag 6784.3 → 7467.7 req/s;
   bulk 6200.6 → 9593.5 req/s.
-- Postgres, `DURATION=10`, `CONNECTIONS=10`: single-flag 724.8 → 2337.9 req/s;
+- Postgres, `BENCH_DURATION=10`, `BENCH_CONNECTIONS=10`: single-flag 724.8 → 2337.9 req/s;
   bulk 1243 → 2067.3 req/s.
 - Also green: `test:contract` 11/11, `test:workspaces` 3/3 (provider) and 5/5
   (SDK), `test:db` 3/3, Docker smoke (including `/readyz`); `npm audit` and
