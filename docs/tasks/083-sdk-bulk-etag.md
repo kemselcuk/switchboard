@@ -97,8 +97,11 @@ Landed on `main`:
   retry/ETag coverage.
 - `1fc0544` — provider treats an explicit `bulkEvaluation: undefined` as the
   bulk default; docs synced.
+- `5b5f222` — retry/attempt timers are ref'ed again so one-shot awaited calls
+  survive backoff; child-process regression test.
+- `67ef664` — correct the closed-client and `cacheTtlMs: 0` documentation.
 
-Tests: SDK 27, provider 6 (`npm run test:workspaces`); root suite 122 tests
+Tests: SDK 28, provider 6 (`npm run test:workspaces`); root suite 122 tests
 (119 pass, 3 Postgres skips) and OFREP contract 11 pass. Real output is recorded
 in `docs/EVIDENCE.md` under "v2.1 SDK bulk + ETag".
 

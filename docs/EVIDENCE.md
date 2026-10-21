@@ -371,7 +371,8 @@ enables it by default. The SDK adds a bounded per-context cache, `ETag` /
 `If-None-Match` / `304` conditional refresh, opt-in polling, `close()`, and
 bounded retries; the provider keeps polling off unless `pollingIntervalMs` is
 set. The commands below were run from the repository root on 2026-10-21 after
-`npm ci`; the workspace totals include the review fixes (`95952e8`, `1fc0544`).
+`npm ci`; the workspace totals include the review fixes (`95952e8`, `1fc0544`,
+`5b5f222`, `67ef664`).
 
 ```text
 npm test
@@ -421,15 +422,15 @@ npm run test:workspaces
 > @switchboard/sdk@2.0.0 test
 > tsx --test test/*.test.ts
 ...
-1..27
-# tests 27
+1..28
+# tests 28
 # suites 0
-# pass 27
+# pass 28
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 2550.581167
+# duration_ms 2917.937875
 ```
 
 ## Historical v1 evidence
