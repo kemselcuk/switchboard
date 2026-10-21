@@ -73,7 +73,11 @@ Landed on `main`:
 - `d5ccbba` — dependency-free metrics registry, `/metrics`, HTTP hooks,
   evaluation counters, 503 failure counter, and tests.
 
-`npm test`: 138 tests (134 pass, 4 Postgres skips); metrics tests 5/5. Real
+Review fixes added OFREP/readiness 503 counting, OFREP `FLAG_NOT_FOUND`
+parity, bulk/304 coverage, cumulative histogram assertions, and a verbatim
+scrape in EVIDENCE.
+
+`npm test`: 141 tests (137 pass, 4 Postgres skips); metrics tests 8/8. Real
 output is recorded in `docs/EVIDENCE.md` under "v2.1 metrics endpoint".
 
 Still out of scope: OpenTelemetry, persistence, dashboards, alert rules,

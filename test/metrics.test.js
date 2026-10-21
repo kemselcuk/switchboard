@@ -35,13 +35,34 @@ test('exposes Prometheus text with help, type, counters and histogram', async (t
     body,
     /switchboard_http_requests_total\{method="GET",route="\/healthz",status="200"\} 1/,
   );
+  const bucketPrefix = 'switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="';
+  const buckets = body
+    .split('\n')
+    .filter((line) => line.startsWith(bucketPrefix))
+    .map((line) => ({
+      le: line.slice(bucketPrefix.length).split('"')[0],
+      count: Number(line.split(' ').at(-1)),
+    }));
+
+  assert.equal(buckets.length, 13);
+
+  for (let index = 1; index < buckets.length; index += 1) {
+    assert.ok(
+      buckets[index].count >= buckets[index - 1].count,
+      `${buckets[index].le} must be cumulative`,
+    );
+  }
+
+  const infinity = buckets.find((bucket) => bucket.le === '+Inf');
+  assert.equal(infinity.count, 1);
   assert.match(
     body,
-    /switchboard_http_request_duration_seconds_bucket\{method="GET",route="\/healthz",status="200",le="0.005"\}/,
+    /switchboard_http_request_duration_seconds_count\{method="GET",route="\/healthz",status="200"\} 1/,
   );
-  assert.match(body, /switchboard_http_request_duration_seconds_sum/);
-  assert.match(body, /switchboard_http_request_duration_seconds_count/);
-  assert.match(body, /switchboard_http_request_duration_seconds_bucket\{[^}]*le="\+Inf"\}/);
+  assert.match(
+    body,
+    /switchboard_http_request_duration_seconds_sum\{method="GET",route="\/healthz",status="200"\} [0-9.]+/,
+  );
 });
 
 test('records OFREP and legacy evaluation results', async (t) => {
@@ -59,7 +80,7 @@ test('records OFREP and legacy evaluation results', async (t) => {
     method: 'POST',
     url: '/ofrep/v1/evaluate/flags/metrics-flag',
     headers: { 'x-api-key': key.key },
-    payload: { context: { targetingKey: 'user-1' } },
+    payload: { context: { targetingKey: 'secret-user-42' } },
   });
 
   const ofrep = await scrape(app);
@@ -67,6 +88,7 @@ test('records OFREP and legacy evaluation results', async (t) => {
     ofrep,
     /switchboard_flag_evaluations_total\{result="SPLIT"\} 1/,
   );
+  assert.equal(ofrep.includes('secret-user-42'), false);
 
   const legacyApp = buildApp({ adminToken: ADMIN_TOKEN });
   t.after(() => legacyApp.close());
@@ -114,6 +136,122 @@ test('counts storage failures mapped to 503', async (t) => {
 
   const body = await scrape(app);
   assert.match(body, /switchboard_db_failures_total 1/);
+});
+
+test('counts OFREP storage failures and readiness failures', async (t) => {
+  const { app, v2 } = await createV2App(t);
+  const original = v2.db.selectFrom.bind(v2.db);
+
+  v2.db.selectFrom = () => {
+    const error = new Error('terminating connection');
+
+    error.code = '57P01';
+    throw error;
+  };
+  t.after(() => {
+    v2.db.selectFrom = original;
+  });
+
+  const ofrep = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/anything',
+    headers: { 'x-api-key': 'sb_srv_deadbeef_invalid' },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(ofrep.statusCode, 503);
+
+  const afterOfrep = await scrape(app);
+  assert.match(afterOfrep, /switchboard_db_failures_total 1/);
+
+  v2.db.selectFrom = original;
+
+  const closed = buildApp();
+  t.after(() => closed.close());
+  closed.db.close();
+
+  const ready = await closed.inject({ method: 'GET', url: '/readyz' });
+  assert.equal(ready.statusCode, 503);
+
+  const afterReady = await scrape(closed);
+  assert.match(afterReady, /switchboard_db_failures_total 1/);
+});
+
+test('counts bulk results once and not on 304', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  await createFlag(app, 'demo', 'production', {
+    key: 'split-flag',
+    enabled: true,
+    rolloutPercentage: 100,
+  });
+  await createFlag(app, 'demo', 'production', {
+    key: 'disabled-flag',
+    enabled: false,
+    rolloutPercentage: 100,
+  });
+  const key = await createApiKey(app, 'demo', 'production');
+
+  const first = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(first.statusCode, 200);
+
+  const body = await scrape(app);
+  assert.match(body, /switchboard_flag_evaluations_total\{result="SPLIT"\} 1/);
+  assert.match(
+    body,
+    /switchboard_flag_evaluations_total\{result="DISABLED"\} 1/,
+  );
+
+  const second = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: {
+      'x-api-key': key.key,
+      'if-none-match': first.headers.etag,
+    },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(second.statusCode, 304);
+
+  const after304 = await scrape(app);
+  assert.match(
+    after304,
+    /switchboard_flag_evaluations_total\{result="SPLIT"\} 1/,
+  );
+  assert.match(
+    after304,
+    /switchboard_flag_evaluations_total\{result="DISABLED"\} 1/,
+  );
+});
+
+test('counts OFREP FLAG_NOT_FOUND like the legacy route', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  const key = await createApiKey(app, 'demo', 'production');
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/missing-flag',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(response.statusCode, 404);
+
+  const body = await scrape(app);
+  assert.match(
+    body,
+    /switchboard_flag_evaluations_total\{result="FLAG_NOT_FOUND"\} 1/,
+  );
 });
 
 test('uses route templates and exposes no tenant data', async (t) => {

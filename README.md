@@ -337,7 +337,8 @@ or raw paths.
   route label is the Fastify template (for example `/api/flags/:key`).
 - `switchboard_http_request_duration_seconds` — histogram with fixed buckets.
 - `switchboard_flag_evaluations_total{result}` — OFREP and legacy evaluation
-  reasons (`SPLIT`, `DISABLED`, `BUCKET_INCLUDED`, ...).
+  reasons (`SPLIT`, `DISABLED`, `BUCKET_INCLUDED`, ...); `FLAG_NOT_FOUND` is
+  counted for legacy and single-flag OFREP lookups.
 - `switchboard_db_failures_total` — responses mapped to `503`.
 
 Example scrape:
@@ -380,7 +381,7 @@ that database and does not delete them (v2.0 has no project/flag deletion);
 point it at a dedicated benchmark database. Numbers are from one run and are
 directional, not a capacity guarantee.
 
-Current local suite: 138 tests, 134 pass, 4 skipped when `DATABASE_URL` is not
+Current local suite: 141 tests, 137 pass, 4 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)

@@ -501,16 +501,16 @@ node --test test/metrics.test.js
 ✔ counts storage failures mapped to 503
 ✔ uses route templates and exposes no tenant data
 ✔ keeps metrics isolated per app instance
-ℹ tests 5
-ℹ pass 5
+ℹ tests 8
+ℹ pass 8
 ℹ fail 0
 ```
 
-Real scrape after one `/healthz` request:
+Real scrape after one `/healthz` request (verbatim):
 
 ```text
 GET /metrics
-content-type: text/plain; version=0.0.4; charset=utf-8
+text/plain; version=0.0.4; charset=utf-8
 # HELP switchboard_http_requests_total HTTP responses by method, route template and status.
 # TYPE switchboard_http_requests_total counter
 switchboard_http_requests_total{method="GET",route="/healthz",status="200"} 1
@@ -518,6 +518,17 @@ switchboard_http_requests_total{method="GET",route="/healthz",status="200"} 1
 # TYPE switchboard_http_request_duration_seconds histogram
 switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.001"} 0
 switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.005"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.01"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.025"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.05"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.1"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.25"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.5"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="1"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="2.5"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="5"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="10"} 1
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="+Inf"} 1
 switchboard_http_request_duration_seconds_sum{method="GET",route="/healthz",status="200"} 0.002093
 switchboard_http_request_duration_seconds_count{method="GET",route="/healthz",status="200"} 1
 # HELP switchboard_flag_evaluations_total Flag evaluations by result reason.
@@ -530,9 +541,9 @@ Full suite after the change:
 
 ```text
 npm test
-ℹ tests 138
+ℹ tests 141
 ℹ suites 0
-ℹ pass 134
+ℹ pass 137
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 4

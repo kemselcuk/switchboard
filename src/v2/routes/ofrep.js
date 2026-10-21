@@ -61,6 +61,10 @@ export function ofrepErrorHandler(error, request, reply) {
   if (statusCode >= 500) {
     request.log.error(error);
 
+    if (statusCode === 503) {
+      request.server.metrics?.recordDbFailure();
+    }
+
     return reply.code(statusCode).send({
       errorDetails: statusCode === 503
         ? 'Flag storage is unavailable'
@@ -114,6 +118,8 @@ export async function ofrepRoutes(app, { db }) {
       );
 
       if (!flag) {
+        app.metrics.recordEvaluation('FLAG_NOT_FOUND');
+
         return reply.code(404).send({
           key: request.params.key,
           errorCode: 'FLAG_NOT_FOUND',

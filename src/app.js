@@ -191,6 +191,8 @@ export function buildApp({
           : ERROR_CODES.EVALUATION_UNAVAILABLE,
       });
 
+      metrics.recordDbFailure();
+
       return sendError(
         reply,
         503,
