@@ -255,6 +255,20 @@ Direct SDK users keep the single-flag path unless they opt in; the provider
 opts in by default. No server changes, no persistent client cache, and no
 stale-if-error policy in this task.
 
+## 13. v2.1 portability track (approved)
+
+Task 084 (`docs/tasks/084-config-export-import.md`) adds dependency-free
+configuration transfer for backups and CI seeding.
+
+| ID | Item | Acceptance |
+|---|---|---|
+| 13.1 | JSON export | Projects/environments/flags/configs in a versioned format; no API keys or secrets |
+| 13.2 | Idempotent import | Create missing definitions, update configs, never delete/rename; one transaction |
+| 13.3 | CLI + dry run | `export:config` / `import:config` use `DATABASE_URL` or `V2_DB_PATH`; dry run writes nothing |
+| 13.4 | Validation | Reject unknown format/version, non-boolean types, invalid keys/rollout without partial writes |
+
+No HTTP endpoints, deletion, or secret export in this track.
+
 Items 12.1–12.4 landed on `main` on 2026-10-21 (`9ab77b8`, `c367a82`,
 `1b4d26d`); test evidence and the remaining out-of-scope list are recorded in
 the task status at `docs/tasks/083-sdk-bulk-etag.md`.
