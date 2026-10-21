@@ -619,6 +619,129 @@ The tarballs contain `dist/index.js`, `README.md`, and `LICENSE`, with no
 `src/` or `test/` files. `npm test` remains at 146 tests (141 pass, 5 Postgres
 skips) and `npm audit` reports no vulnerabilities.
 
+## v2.1 flag types (Tasks 088 + 089)
+
+Task 088 added `boolean`/`string`/`number`/`json` flag types with
+`onValue`/`offValue` on the server. Task 089 added generic
+`EvaluationDetails<T>` to the Node SDK, typed getters for string/number/object,
+read-time type checking in both the single-flag and bulk paths, and
+string/number/object resolution in the OpenFeature provider. The official OFREP
+provider contract test also evaluates string and number flags against a live
+local service.
+
+Commands were run from the repository root on 2026-10-21 after `npm ci`.
+
+```text
+npm run build --workspace @switchboard/sdk
+> @switchboard/sdk@2.0.0 build
+> tsc -p tsconfig.json
+```
+
+```text
+npm test --workspace @switchboard/sdk
+...
+# Subtest: returns string, number and object values from OFREP
+ok 11 - returns string, number and object values from OFREP
+# Subtest: falls back with TYPE_MISMATCH when a value has the wrong type
+ok 12 - falls back with TYPE_MISMATCH when a value has the wrong type
+# Subtest: treats non-finite numbers as TYPE_MISMATCH
+ok 13 - treats non-finite numbers as TYPE_MISMATCH
+# Subtest: types bulk-cached values at read time
+ok 14 - types bulk-cached values at read time
+# Subtest: bulk mode reports TYPE_MISMATCH and accepts array objects
+ok 15 - bulk mode reports TYPE_MISMATCH and accepts array objects
+...
+1..33
+# tests 33
+# suites 0
+# pass 33
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+```
+
+```text
+npm run build --workspace @switchboard/openfeature-provider
+> @switchboard/openfeature-provider@2.0.0 build
+> tsc -p tsconfig.json
+```
+
+```text
+npm test --workspace @switchboard/openfeature-provider
+...
+# Subtest: resolves string, number and object flags from one bulk request
+ok 5 - resolves string, number and object flags from one bulk request
+# Subtest: maps a wrong value type to TYPE_MISMATCH
+ok 6 - maps a wrong value type to TYPE_MISMATCH
+# Subtest: returns GENERAL for transport failures across flag types
+ok 7 - returns GENERAL for transport failures across flag types
+...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+```
+
+```text
+npm run test:workspaces
+> @switchboard/openfeature-provider@2.0.0 test
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+...
+> @switchboard/sdk@2.0.0 test
+1..33
+# tests 33
+# suites 0
+# pass 33
+# fail 0
+...
+```
+
+```text
+npm test
+ℹ tests 156
+ℹ suites 0
+ℹ pass 151
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 5
+ℹ todo 0
+```
+
+The 5 skipped tests are the Postgres integration tests, which run when
+`DATABASE_URL` is set.
+
+```text
+npm run test:contract
+✔ official OFREP provider evaluates against the service
+✔ vendored OFREP contract exposes the required core paths
+✔ single OFREP response matches the official schema
+✔ bulk OFREP response matches the official schema
+✔ typed OFREP responses match the official value schemas
+✔ OFREP not-found response matches the official schema
+✔ quoted bulk ETag round-trips and is resent on 304
+✔ bulk ETag is scoped to the project key
+✔ single OFREP 400 matches the evaluationFailure schema
+✔ bulk OFREP 400 matches the bulkEvaluationFailure schema
+✔ OFREP storage failures use a general error body
+✔ OFREP 500 uses the generalErrorResponse schema
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+```
+
 ## Historical v1 evidence
 
 ## 1. Automated tests

@@ -516,6 +516,281 @@ test('maps missing and non-boolean bulk flags to error details', async (t) => {
   assert.equal(requestCount, 1);
 });
 
+test('returns string, number and object values from OFREP', async (t) => {
+  const server = await startServer((request, response) => {
+    const key = decodeURIComponent((request.url ?? '').split('/').pop() ?? '');
+    const evaluations: Record<
+      string,
+      { value: unknown; reason: string; variant?: string }
+    > = {
+      theme: { value: 'dark', reason: 'SPLIT', variant: 'on' },
+      'max-seats': { value: 12, reason: 'SPLIT', variant: 'on' },
+      'ui-config': {
+        value: { theme: 'dark', columns: 3 },
+        reason: 'SPLIT',
+        variant: 'on',
+      },
+    };
+
+    request.resume();
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ key, ...evaluations[key] }));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+  });
+  t.after(() => client.close());
+
+  const theme = await client.getStringDetails('theme', 'light');
+  const seats = await client.getNumberDetails('max-seats', 1);
+  const config = await client.getObjectDetails(
+    'ui-config',
+    { theme: 'light' },
+    { targetingKey: 'user-1' },
+  );
+
+  assert.deepEqual(theme, {
+    key: 'theme',
+    value: 'dark',
+    reason: 'SPLIT',
+    variant: 'on',
+  });
+  assert.deepEqual(seats, {
+    key: 'max-seats',
+    value: 12,
+    reason: 'SPLIT',
+    variant: 'on',
+  });
+  assert.deepEqual(config, {
+    key: 'ui-config',
+    value: { theme: 'dark', columns: 3 },
+    reason: 'SPLIT',
+    variant: 'on',
+  });
+
+  assert.equal(await client.getStringValue('theme', 'light'), 'dark');
+  assert.equal(await client.getNumberValue('max-seats', 1), 12);
+  assert.deepEqual(
+    await client.getObjectValue('ui-config', { theme: 'light' }),
+    { theme: 'dark', columns: 3 },
+  );
+});
+
+test('falls back with TYPE_MISMATCH when a value has the wrong type', async (t) => {
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        key: 'flag',
+        value: true,
+        reason: 'SPLIT',
+      }));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+  });
+  t.after(() => client.close());
+
+  const stringDetails = await client.getStringDetails('flag', 'fallback');
+  const numberDetails = await client.getNumberDetails('flag', 7);
+  const objectDetails = await client.getObjectDetails(
+    'flag',
+    { fallback: true },
+  );
+
+  assert.deepEqual(stringDetails, {
+    key: 'flag',
+    value: 'fallback',
+    reason: 'ERROR',
+    errorCode: 'TYPE_MISMATCH',
+    errorMessage: 'Switchboard returned a non-string value',
+  });
+  assert.deepEqual(numberDetails, {
+    key: 'flag',
+    value: 7,
+    reason: 'ERROR',
+    errorCode: 'TYPE_MISMATCH',
+    errorMessage: 'Switchboard returned a non-number value',
+  });
+  assert.deepEqual(objectDetails, {
+    key: 'flag',
+    value: { fallback: true },
+    reason: 'ERROR',
+    errorCode: 'TYPE_MISMATCH',
+    errorMessage: 'Switchboard returned a non-object value',
+  });
+});
+
+test('treats non-finite numbers as TYPE_MISMATCH', async (t) => {
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      // 1e400 parses to Infinity, which JSON cannot represent on the wire.
+      response.end('{"key":"ratio","value":1e400,"reason":"SPLIT"}');
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+  });
+  t.after(() => client.close());
+
+  const details = await client.getNumberDetails('ratio', 1.5);
+  const value = await client.getNumberValue('ratio', 1.5);
+
+  assert.deepEqual(details, {
+    key: 'ratio',
+    value: 1.5,
+    reason: 'ERROR',
+    errorCode: 'TYPE_MISMATCH',
+    errorMessage: 'Switchboard returned a non-number value',
+  });
+  assert.equal(value, 1.5);
+});
+
+test('types bulk-cached values at read time', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(bulkResponse([
+        { key: 'theme', value: 'dark', reason: 'SPLIT', variant: 'on' },
+        { key: 'max-seats', value: 12, reason: 'SPLIT', variant: 'on' },
+        {
+          key: 'ui-config',
+          value: { theme: 'dark' },
+          reason: 'SPLIT',
+          variant: 'on',
+        },
+        { key: 'enabled', value: true, reason: 'SPLIT', variant: 'on' },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 60000,
+  });
+  t.after(() => client.close());
+
+  const context = { targetingKey: 'user-1' };
+  const theme = await client.getStringDetails('theme', 'light', context);
+  const seats = await client.getNumberDetails('max-seats', 1, context);
+  const config = await client.getObjectDetails(
+    'ui-config',
+    { theme: 'light' },
+    context,
+  );
+  const enabled = await client.getBooleanDetails('enabled', false, context);
+
+  assert.deepEqual(theme, {
+    key: 'theme',
+    value: 'dark',
+    reason: 'SPLIT',
+    variant: 'on',
+  });
+  assert.deepEqual(seats, {
+    key: 'max-seats',
+    value: 12,
+    reason: 'SPLIT',
+    variant: 'on',
+  });
+  assert.deepEqual(config, {
+    key: 'ui-config',
+    value: { theme: 'dark' },
+    reason: 'SPLIT',
+    variant: 'on',
+  });
+  assert.deepEqual(enabled, {
+    key: 'enabled',
+    value: true,
+    reason: 'SPLIT',
+    variant: 'on',
+  });
+  assert.equal(
+    await client.getStringValue('theme', 'light', context),
+    'dark',
+  );
+  assert.equal(await client.getNumberValue('max-seats', 1, context), 12);
+  assert.deepEqual(
+    await client.getObjectValue('ui-config', {}, context),
+    { theme: 'dark' },
+  );
+  assert.equal(requestCount, 1);
+});
+
+test('bulk mode reports TYPE_MISMATCH and accepts array objects', async (t) => {
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(bulkResponse([
+        { key: 'theme', value: 7, reason: 'SPLIT' },
+        { key: 'ratio', value: '1.5', reason: 'SPLIT' },
+        { key: 'config', value: 'nope', reason: 'SPLIT' },
+        { key: 'enabled', value: 'yes', reason: 'SPLIT' },
+        { key: 'list', value: [1, 2], reason: 'SPLIT' },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 60000,
+  });
+  t.after(() => client.close());
+
+  const context = { targetingKey: 'user-1' };
+  const theme = await client.getStringDetails('theme', 'light', context);
+  const ratio = await client.getNumberDetails('ratio', 1.5, context);
+  const config = await client.getObjectDetails(
+    'config',
+    { fallback: true },
+    context,
+  );
+  const enabled = await client.getBooleanDetails('enabled', false, context);
+  const list = await client.getObjectDetails<number[]>('list', [], context);
+
+  assert.equal(theme.value, 'light');
+  assert.equal(theme.errorCode, 'TYPE_MISMATCH');
+  assert.equal(theme.errorMessage, 'Switchboard returned a non-string value');
+  assert.equal(ratio.value, 1.5);
+  assert.equal(ratio.errorCode, 'TYPE_MISMATCH');
+  assert.equal(ratio.errorMessage, 'Switchboard returned a non-number value');
+  assert.deepEqual(config.value, { fallback: true });
+  assert.equal(config.errorCode, 'TYPE_MISMATCH');
+  assert.equal(config.errorMessage, 'Switchboard returned a non-object value');
+  assert.equal(enabled.value, false);
+  assert.equal(enabled.errorCode, 'TYPE_MISMATCH');
+  assert.equal(
+    enabled.errorMessage,
+    'Switchboard returned a non-boolean value',
+  );
+  assert.deepEqual(list.value, [1, 2]);
+  assert.equal(list.reason, 'SPLIT');
+});
+
 test('retries 5xx responses up to maxRetries', async (t) => {
   let requestCount = 0;
   const server = await startServer((request, response) => {

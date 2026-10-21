@@ -57,6 +57,30 @@ console.log(details.value, details.reason, details.errorCode);
 
 `getBooleanValue(key, defaultValue, context)` returns only the boolean.
 
+Typed getters mirror the boolean API for the other flag types:
+
+```js
+const theme = await client.getStringDetails(
+  'checkout-theme',
+  'light',
+  { targetingKey: 'user-123' },
+); // { value: 'dark', reason: 'SPLIT', variant: 'on', ... }
+
+const limit = await client.getNumberValue('checkout-limit', 10);
+const layout = await client.getObjectValue('checkout-layout', { columns: 1 });
+```
+
+| Method | Default | Value contract |
+|---|---|---|
+| `getBooleanDetails` / `getBooleanValue` | `false` | `boolean` |
+| `getStringDetails` / `getStringValue` | required | `string` |
+| `getNumberDetails` / `getNumberValue` | required | finite `number` |
+| `getObjectDetails<T>` / `getObjectValue<T>` | required | non-null object (`json`); arrays accepted defensively |
+
+The details methods return `EvaluationDetails<T>` (`key`, `value`, `reason`,
+`variant`, `errorCode`, `errorMessage`); `BooleanEvaluationDetails` remains an
+alias for `EvaluationDetails<boolean>`.
+
 ### Options
 
 | Option | Default | Meaning |
@@ -132,7 +156,11 @@ requests, and polling stays off.
 Unknown flags, invalid keys, storage unavailability, timeouts, and network
 errors return the supplied default with `reason: "ERROR"` and an `errorCode` in
 `details`; they do not throw. A missing flag in a bulk response maps to
-`FLAG_NOT_FOUND`, and a non-boolean value maps to `TYPE_MISMATCH`.
+`FLAG_NOT_FOUND`. A value of the wrong type maps to `TYPE_MISMATCH` and returns
+the supplied default; this includes non-finite numbers and `json` values that
+are not non-null objects. Both single-flag and bulk responses are checked at
+read time, so the bulk cache stores untyped values and each getter applies its
+own type contract.
 
 Retries are bounded by `maxRetries` (`maxRetries + 1` total attempts) with
 exponential backoff and jitter, and apply only to network errors, timeouts, and
@@ -145,7 +173,8 @@ the existing cache entry untouched.
 
 - Uses the single-flag OFREP endpoint by default; `bulkEvaluation: true` uses
   the bulk endpoint and the per-context cache.
-- v2.0 supports boolean flags only.
+- Supports `boolean`, `string`, `number`, and plain-object `json` flags through
+  the typed getters above.
 - `targetingKey` defaults to `"anonymous"` when omitted.
 
 See the repository [README](../../README.md) for API keys, project setup, and

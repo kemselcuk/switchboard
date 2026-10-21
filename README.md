@@ -32,9 +32,10 @@ project isolation, 20%→40% monotonicity, two services, and the legacy API.
 - Project-scoped flag deletion with cascading environment configs.
 - Verified tarball install for the SDK and OpenFeature provider.
 - Dependency-free Prometheus `/metrics` endpoint.
+- Typed flags (`boolean`, `string`, `number`, `json`) with on/off values.
 
-Targeting rules/segments, string/number/JSON flag types, a full admin dashboard,
-audit/RBAC, browser SDK, and streaming are planned for later versions.
+Targeting rules/segments, a full admin dashboard, audit/RBAC, browser SDK, and
+streaming are planned for later versions.
 
 ## Quick start
 
@@ -112,7 +113,31 @@ const enabled = await client.getBooleanValue(
   false,
   { targetingKey: userId },
 );
+
+const theme = await client.getStringValue(
+  'checkout-theme',
+  'light',
+  { targetingKey: userId },
+);
+
+const limit = await client.getNumberValue(
+  'checkout-limit',
+  10,
+  { targetingKey: userId },
+);
+
+const layout = await client.getObjectValue(
+  'checkout-layout',
+  { columns: 1 },
+  { targetingKey: userId },
+);
 ```
+
+`getBooleanDetails`, `getStringDetails`, `getNumberDetails`, and
+`getObjectDetails` return the full `EvaluationDetails<T>` (value, reason,
+variant, error code). A value of the wrong type returns the supplied default
+with `errorCode: "TYPE_MISMATCH"`; number values must be finite and object
+values must be non-null objects (arrays are accepted defensively).
 
 The SDK uses one request per flag by default. `bulkEvaluation: true` uses the
 bulk OFREP endpoint with a per-context cache; `cacheTtlMs` (default 10s),
@@ -139,6 +164,11 @@ const client = OpenFeature.getClient();
 const enabled = await client.getBooleanValue(
   'new-checkout',
   false,
+  { targetingKey: userId },
+);
+const theme = await client.getStringValue(
+  'checkout-theme',
+  'light',
   { targetingKey: userId },
 );
 ```
@@ -200,6 +230,11 @@ curl -sS -X POST "$BASE/api/v1/projects/checkout/environments/production/flags" 
   -H 'content-type: application/json' \
   -d '{"key":"new-checkout","enabled":true,"rolloutPercentage":20.5}'
 
+curl -sS -X POST "$BASE/api/v1/projects/checkout/environments/production/flags" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"key":"checkout-theme","type":"string","enabled":true,"rolloutPercentage":50,"onValue":"dark","offValue":"light"}'
+
 curl -sS -X POST "$BASE/api/v1/projects/checkout/environments/production/api-keys" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'content-type: application/json' \
@@ -208,6 +243,22 @@ curl -sS -X POST "$BASE/api/v1/projects/checkout/environments/production/api-key
 
 The API key response contains `key` once; store it as a secret. Only the prefix
 and a SHA-256 hash are stored in the database.
+
+### Flag types
+
+`type` is `boolean` (default), `string`, `number`, or `json`. Non-boolean flags
+require both `onValue` and `offValue`:
+
+- enabled and bucket included → `onValue`, reason `SPLIT`, variant `on`;
+- enabled and bucket excluded → `offValue`, reason `SPLIT`, variant `off`;
+- disabled → `offValue`, reason `DISABLED`, variant `disabled`.
+
+The type is immutable after creation. Recreating an existing key with another
+type returns `409 FLAG_TYPE_MISMATCH`. Limits: strings are at most 4096
+characters, numbers must be finite, and `json` values must be plain objects
+that serialize to at most 8192 bytes (arrays and `null` are rejected). Boolean
+flags reject on/off values and keep their existing behavior. The legacy
+`/api/flags` API stays boolean-only and ignores non-boolean flags.
 
 ### OFREP evaluation
 
@@ -431,7 +482,7 @@ that database and does not clean them up (flag deletion exists, project
 deletion does not); point it at a dedicated benchmark database. Numbers are
 from one run and are directional, not a capacity guarantee.
 
-Current local suite: 146 tests, 141 pass, 5 skipped when `DATABASE_URL` is not
+Current local suite: 156 tests, 151 pass, 5 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)
@@ -474,8 +525,9 @@ examples/
 
 - `ADMIN_TOKEN` is still the bootstrap admin credential; project-scoped admin
   keys and RBAC/SSO are later work.
-- v2.0 supports boolean flags only; targeting rules, segments, and
-  string/number/JSON flags are later work.
+- Typed flags support `boolean`, `string`, `number`, and plain-object `json`
+  values only; targeting rules, segments, variant weights, and changing a
+  flag's type after creation are later work.
 - Server API keys only; browser/client keys and a browser SDK are later work.
 - Single Postgres instance target; server-side flag/config evaluation reads
   are uncached. The only server-side cache is a process-local 5s API-key prefix

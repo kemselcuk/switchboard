@@ -525,3 +525,55 @@ a flag through the SDK and the provider against a mock OFREP server. Actual
 - The provider must be installed with the SDK at the same version.
 - Tarballs are ignored by git; the verification script cleans up after itself.
 - A future release can flip `private` and publish without code changes.
+
+## ADR-029 — Typed flags and typed SDK/provider surface
+
+**Context:** v2.0 supported boolean flags only, so configuration-like values
+(theme names, limits, JSON layouts) had to be encoded as booleans or kept
+outside the flag service. OFREP already carries an arbitrary JSON `value`, and
+the rollout algorithm and reasons are deterministic (ADR-016). The remaining
+question is how to model non-boolean values without changing existing boolean
+behavior.
+
+**Decision:** Add `boolean`, `string`, `number`, and `json` flag types. `type`
+defaults to `boolean` and is immutable after creation, like the key
+(`409 FLAG_TYPE_MISMATCH` when an existing key is recreated with another type).
+Boolean flags keep the existing semantics and reject `onValue`/`offValue`.
+
+Non-boolean flags require both `onValue` and `offValue`:
+
+- enabled and bucket included → `onValue`, reason `SPLIT`, variant `on`;
+- enabled and bucket excluded → `offValue`, reason `SPLIT`, variant `off`;
+- disabled → `offValue`, reason `DISABLED`, variant `disabled`.
+
+Values are limited to strings of at most 4096 characters, finite numbers, and
+plain JSON objects serialized to at most 8192 bytes; arrays and `null` are not
+`json` values. Type and both values are part of the bulk ETag input.
+
+The SDK exposes generic `EvaluationDetails<T>` with `getStringDetails` /
+`getStringValue`, `getNumberDetails` / `getNumberValue`, and
+`getObjectDetails<T>` / `getObjectValue<T>` next to the boolean methods;
+`BooleanEvaluationDetails` stays as `EvaluationDetails<boolean>`. Every getter
+validates its expected type in both the single-flag and bulk paths (the bulk
+cache keeps untyped values and types them at read time). A mismatch returns the
+supplied default with reason `ERROR`, `errorCode: "TYPE_MISMATCH"`, and the same
+message style as the boolean path. Missing flags, auth, storage, timeout,
+network, retry, cache, ETag, polling, and close behavior are unchanged.
+
+The OpenFeature provider resolves string, number, and object evaluations through
+those typed getters instead of returning a hardcoded mismatch, and maps SDK
+error codes: `FLAG_NOT_FOUND` and `TYPE_MISMATCH` keep their OpenFeature
+equivalents, while authentication, storage, timeout, network, and general
+failures map to `GENERAL`. Boolean resolution, the bulk default, and `onClose`
+are unchanged.
+
+**Consequences:**
+- Non-boolean flags carry explicit on/off values; there is no variants model
+  and no default value inference.
+- A flag type cannot be changed; create a new key instead.
+- Legacy `/api/flags` and `/api/evaluate` stay boolean-only and ignore
+  non-boolean flags.
+- The JSON type is a plain object, not an arbitrary JSON document; arrays must
+  be wrapped in an object.
+- Targeting rules, variant weights, per-type UI controls, and type migration
+  remain out of scope.

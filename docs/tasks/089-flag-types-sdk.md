@@ -67,3 +67,15 @@ and changing a flag's type after creation.
 ## Workflow
 
 SDK/provider first; docs; independent review round.
+
+## Status
+
+Implemented on a `task/089` branch based on `main` `6912db5` with the commit
+`feat: add typed flag support to sdk and provider`. Recorded output is in
+`docs/EVIDENCE.md` under "v2.1 flag types (Tasks 088 + 089)":
+
+- SDK tests `33/33`, provider tests `8/8`; both packages build with `tsc`.
+- `npm run test:workspaces` green.
+- Root `npm test`: 156 tests, 151 pass, 5 Postgres skips.
+- `npm run test:contract`: 12/12, including the extended official-provider
+  string and number evaluation.

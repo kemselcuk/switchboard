@@ -79,3 +79,26 @@ string/number SDK methods (Task 089), and flag type changes after creation.
 
 Implement server core first; SDK/provider in Task 089 after this lands; docs and
 review afterwards.
+
+## Status
+
+Landed on `main` in `46a04f5` (`feat: add flag value types`). Suite counts for
+the server change (recorded on the Task 089 branch, which only touches the
+client packages and the assertions inside the existing official-provider
+contract test):
+
+```text
+npm test
+ℹ tests 156
+ℹ pass 151
+ℹ fail 0
+ℹ skipped 5
+
+npm run test:contract
+ℹ tests 12
+ℹ pass 12
+ℹ fail 0
+```
+
+The 5 skipped tests are the Postgres integration tests (`DATABASE_URL` unset).
+Task 089 then added typed SDK/provider coverage; see the Task 089 status.

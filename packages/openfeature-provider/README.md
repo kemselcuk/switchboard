@@ -55,11 +55,17 @@ const enabled = await client.getBooleanValue(
   false,
   { targetingKey: 'user-123' },
 );
+const theme = await client.getStringValue(
+  'checkout-theme',
+  'light',
+  { targetingKey: 'user-123' },
+);
 ```
 
 ## Behavior
 
-- Implements boolean evaluation through `@switchboard/sdk`.
+- Resolves boolean, string, number, and object evaluations through the
+  `@switchboard/sdk` typed getters.
 - Bulk evaluation is **on by default**: the first evaluation for a context
   fetches all flags with one `POST /ofrep/v1/evaluate/flags` request and later
   evaluations for that context use the SDK cache. Pass `bulkEvaluation: false`
@@ -69,8 +75,11 @@ const enabled = await client.getBooleanValue(
   through the SDK options.
 - `onClose()` calls `client.close()`, which clears polling timers and the
   per-context cache.
-- String, number, and object evaluation return the code default with
-  `TYPE_MISMATCH`, because v2.0 supports boolean flags only.
+- SDK error codes map to OpenFeature codes: `FLAG_NOT_FOUND` and `TYPE_MISMATCH`
+  keep their OpenFeature equivalents; authentication, storage, timeout,
+  network, and general failures map to `GENERAL`.
+- Wrong-typed values return the code default with `TYPE_MISMATCH`; number values
+  must be finite and object values non-null objects.
 - Unknown flags, invalid keys, storage failures, timeouts, and network errors
   resolve to the code default with an OpenFeature error code.
 

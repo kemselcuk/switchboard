@@ -330,5 +330,7 @@ beyond boolean while keeping deterministic percentage rollout.
 | 17.4 | Legacy + transfer | Legacy stays boolean-only; export/import round-trips all types |
 | 17.5 | SDK/provider | Typed getters and OpenFeature resolution for string/number/object |
 
-Out of scope: targeting rules, variants/weights, UI controls, flag type changes,
-and non-boolean legacy API support.
+Landed on `main` in `46a04f5` (server core) and `feat: add typed flag support to
+sdk and provider` (SDK/provider); see the task statuses and `docs/EVIDENCE.md`
+for test evidence. Out of scope: targeting rules, variants/weights, UI controls,
+flag type changes, and non-boolean legacy API support.

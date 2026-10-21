@@ -12,14 +12,18 @@ export type SwitchboardErrorCode =
   | 'TYPE_MISMATCH'
   | 'GENERAL';
 
-export type BooleanEvaluationDetails = {
+export type EvaluationDetails<T> = {
   key: string;
-  value: boolean;
+  value: T;
   reason: string;
   variant?: string;
   errorCode?: SwitchboardErrorCode;
   errorMessage?: string;
 };
+
+export type BooleanEvaluationDetails = EvaluationDetails<boolean>;
+
+type ExpectedValueType = 'boolean' | 'string' | 'number' | 'object';
 
 export type SwitchboardClientOptions = {
   baseUrl: string;
@@ -135,6 +139,24 @@ function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
   }
 }
 
+function hasExpectedType(
+  value: unknown,
+  expected: ExpectedValueType,
+): boolean {
+  switch (expected) {
+    case 'boolean':
+      return typeof value === 'boolean';
+    case 'string':
+      return typeof value === 'string';
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'object':
+      // Arrays are not valid server-side json values, but accepting them
+      // defensively keeps forward-compatible array payloads usable.
+      return value !== null && typeof value === 'object';
+  }
+}
+
 export class SwitchboardClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -218,12 +240,8 @@ export class SwitchboardClient {
     flagKey: string,
     defaultValue = false,
     context: EvaluationContext = {},
-  ): Promise<BooleanEvaluationDetails> {
-    if (this.bulkEvaluation) {
-      return this.getBulkBooleanDetails(flagKey, defaultValue, context);
-    }
-
-    return this.getSingleBooleanDetails(flagKey, defaultValue, context);
+  ): Promise<EvaluationDetails<boolean>> {
+    return this.evaluate(flagKey, defaultValue, context, 'boolean');
   }
 
   async getBooleanValue(
@@ -234,11 +252,73 @@ export class SwitchboardClient {
     return (await this.getBooleanDetails(flagKey, defaultValue, context)).value;
   }
 
-  private async getSingleBooleanDetails(
+  async getStringDetails(
     flagKey: string,
-    defaultValue: boolean,
+    defaultValue: string,
+    context: EvaluationContext = {},
+  ): Promise<EvaluationDetails<string>> {
+    return this.evaluate(flagKey, defaultValue, context, 'string');
+  }
+
+  async getStringValue(
+    flagKey: string,
+    defaultValue: string,
+    context: EvaluationContext = {},
+  ): Promise<string> {
+    return (await this.getStringDetails(flagKey, defaultValue, context)).value;
+  }
+
+  async getNumberDetails(
+    flagKey: string,
+    defaultValue: number,
+    context: EvaluationContext = {},
+  ): Promise<EvaluationDetails<number>> {
+    return this.evaluate(flagKey, defaultValue, context, 'number');
+  }
+
+  async getNumberValue(
+    flagKey: string,
+    defaultValue: number,
+    context: EvaluationContext = {},
+  ): Promise<number> {
+    return (await this.getNumberDetails(flagKey, defaultValue, context)).value;
+  }
+
+  async getObjectDetails<T extends object = Record<string, unknown>>(
+    flagKey: string,
+    defaultValue: T,
+    context: EvaluationContext = {},
+  ): Promise<EvaluationDetails<T>> {
+    return this.evaluate(flagKey, defaultValue, context, 'object');
+  }
+
+  async getObjectValue<T extends object = Record<string, unknown>>(
+    flagKey: string,
+    defaultValue: T,
+    context: EvaluationContext = {},
+  ): Promise<T> {
+    return (await this.getObjectDetails(flagKey, defaultValue, context)).value;
+  }
+
+  private evaluate<T>(
+    flagKey: string,
+    defaultValue: T,
     context: EvaluationContext,
-  ): Promise<BooleanEvaluationDetails> {
+    expected: ExpectedValueType,
+  ): Promise<EvaluationDetails<T>> {
+    if (this.bulkEvaluation) {
+      return this.getBulkDetails(flagKey, defaultValue, context, expected);
+    }
+
+    return this.getSingleDetails(flagKey, defaultValue, context, expected);
+  }
+
+  private async getSingleDetails<T>(
+    flagKey: string,
+    defaultValue: T,
+    context: EvaluationContext,
+    expected: ExpectedValueType,
+  ): Promise<EvaluationDetails<T>> {
     const transport = await this.sendWithRetries(
       `${this.baseUrl}/ofrep/v1/evaluate/flags/${encodeURIComponent(flagKey)}`,
       this.requestHeaders(),
@@ -298,19 +378,19 @@ export class SwitchboardClient {
       variant?: unknown;
     };
 
-    if (typeof payload.value !== 'boolean') {
+    if (!hasExpectedType(payload.value, expected)) {
       return {
         key: flagKey,
         value: defaultValue,
         reason: 'ERROR',
         errorCode: 'TYPE_MISMATCH',
-        errorMessage: 'Switchboard returned a non-boolean value',
+        errorMessage: `Switchboard returned a non-${expected} value`,
       };
     }
 
     return {
       key: typeof payload.key === 'string' ? payload.key : flagKey,
-      value: payload.value,
+      value: payload.value as T,
       reason: typeof payload.reason === 'string' ? payload.reason : 'UNKNOWN',
       variant: typeof payload.variant === 'string'
         ? payload.variant
@@ -318,11 +398,12 @@ export class SwitchboardClient {
     };
   }
 
-  private async getBulkBooleanDetails(
+  private async getBulkDetails<T>(
     flagKey: string,
-    defaultValue: boolean,
+    defaultValue: T,
     context: EvaluationContext,
-  ): Promise<BooleanEvaluationDetails> {
+    expected: ExpectedValueType,
+  ): Promise<EvaluationDetails<T>> {
     const normalized = normalizeContext(context);
     const cacheKey = stableStringify(normalized);
     let entry = this.bulkCache.get(cacheKey);
@@ -338,7 +419,7 @@ export class SwitchboardClient {
     }
 
     if (this.isCacheFresh(entry)) {
-      return this.bulkDetails(entry, flagKey, defaultValue);
+      return this.bulkDetails(entry, flagKey, defaultValue, expected);
     }
 
     const outcome = await this.refreshBulk(cacheKey, entry);
@@ -353,7 +434,7 @@ export class SwitchboardClient {
       };
     }
 
-    return this.bulkDetails(entry, flagKey, defaultValue);
+    return this.bulkDetails(entry, flagKey, defaultValue, expected);
   }
 
   private evictExcessCacheEntries(): void {
@@ -382,11 +463,12 @@ export class SwitchboardClient {
     return Date.now() - entry.refreshedAt < this.cacheTtlMs;
   }
 
-  private bulkDetails(
+  private bulkDetails<T>(
     entry: BulkCacheEntry,
     flagKey: string,
-    defaultValue: boolean,
-  ): BooleanEvaluationDetails {
+    defaultValue: T,
+    expected: ExpectedValueType,
+  ): EvaluationDetails<T> {
     const flag = entry.flags?.get(flagKey);
 
     if (!flag) {
@@ -399,19 +481,19 @@ export class SwitchboardClient {
       };
     }
 
-    if (typeof flag.value !== 'boolean') {
+    if (!hasExpectedType(flag.value, expected)) {
       return {
         key: flagKey,
         value: defaultValue,
         reason: 'ERROR',
         errorCode: 'TYPE_MISMATCH',
-        errorMessage: 'Switchboard returned a non-boolean value',
+        errorMessage: `Switchboard returned a non-${expected} value`,
       };
     }
 
     return {
       key: flagKey,
-      value: flag.value,
+      value: flag.value as T,
       reason: flag.reason,
       variant: flag.variant,
     };
@@ -606,11 +688,11 @@ export class SwitchboardClient {
     };
   }
 
-  private transportFailure(
+  private transportFailure<T>(
     flagKey: string,
-    defaultValue: boolean,
+    defaultValue: T,
     kind: 'timeout' | 'network',
-  ): BooleanEvaluationDetails {
+  ): EvaluationDetails<T> {
     const isTimeout = kind === 'timeout';
 
     return {

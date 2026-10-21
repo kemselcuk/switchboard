@@ -26,6 +26,22 @@ test('official OFREP provider evaluates against the service', async (t) => {
     enabled: false,
     rolloutPercentage: 100,
   });
+  await createFlag(app, 'demo', 'production', {
+    key: 'checkout-theme',
+    type: 'string',
+    enabled: true,
+    rolloutPercentage: 100,
+    onValue: 'dark',
+    offValue: 'light',
+  });
+  await createFlag(app, 'demo', 'production', {
+    key: 'max-seats',
+    type: 'number',
+    enabled: true,
+    rolloutPercentage: 0,
+    onValue: 25,
+    offValue: 5,
+  });
   const key = await createApiKey(app, 'demo', 'production');
 
   await app.listen({ port: 0, host: '127.0.0.1' });
@@ -70,4 +86,24 @@ test('official OFREP provider evaluates against the service', async (t) => {
 
   assert.equal(missing.value, false);
   assert.equal(missing.errorCode, ErrorCode.FLAG_NOT_FOUND);
+
+  const theme = await client.getStringDetails(
+    'checkout-theme',
+    'system',
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(theme.value, 'dark');
+  assert.equal(theme.reason, 'SPLIT');
+  assert.equal(theme.variant, 'on');
+
+  const seats = await client.getNumberDetails(
+    'max-seats',
+    1,
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(seats.value, 5);
+  assert.equal(seats.reason, 'SPLIT');
+  assert.equal(seats.variant, 'off');
 });

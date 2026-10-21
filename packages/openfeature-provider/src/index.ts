@@ -7,7 +7,7 @@ import {
 } from '@openfeature/server-sdk';
 import {
   SwitchboardClient,
-  type BooleanEvaluationDetails,
+  type EvaluationDetails,
   type SwitchboardClientOptions,
   type SwitchboardErrorCode,
 } from '@switchboard/sdk';
@@ -21,13 +21,15 @@ function mapError(code: SwitchboardErrorCode): ErrorCode {
     case 'TYPE_MISMATCH':
       return ErrorCode.TYPE_MISMATCH;
     default:
+      // UNAUTHORIZED, EVALUATION_UNAVAILABLE, TIMEOUT, NETWORK_ERROR, and
+      // GENERAL have no dedicated OpenFeature code.
       return ErrorCode.GENERAL;
   }
 }
 
-function toResolution(
-  details: BooleanEvaluationDetails,
-): ResolutionDetails<boolean> {
+function toResolution<T>(
+  details: EvaluationDetails<T>,
+): ResolutionDetails<T> {
   return {
     value: details.value,
     reason: details.reason,
@@ -76,38 +78,44 @@ export class SwitchboardProvider implements Provider {
   }
 
   async resolveStringEvaluation(
-    _flagKey: string,
+    flagKey: string,
     defaultValue: string,
+    context: EvaluationContext,
   ): Promise<ResolutionDetails<string>> {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: ErrorCode.TYPE_MISMATCH,
-      errorMessage: 'Switchboard v2.0 supports boolean flags only',
-    };
+    const details = await this.client.getStringDetails(
+      flagKey,
+      defaultValue,
+      context,
+    );
+
+    return toResolution(details);
   }
 
   async resolveNumberEvaluation(
-    _flagKey: string,
+    flagKey: string,
     defaultValue: number,
+    context: EvaluationContext,
   ): Promise<ResolutionDetails<number>> {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: ErrorCode.TYPE_MISMATCH,
-      errorMessage: 'Switchboard v2.0 supports boolean flags only',
-    };
+    const details = await this.client.getNumberDetails(
+      flagKey,
+      defaultValue,
+      context,
+    );
+
+    return toResolution(details);
   }
 
   async resolveObjectEvaluation<T extends JsonValue>(
-    _flagKey: string,
+    flagKey: string,
     defaultValue: T,
+    context: EvaluationContext,
   ): Promise<ResolutionDetails<T>> {
-    return {
-      value: defaultValue,
-      reason: 'ERROR',
-      errorCode: ErrorCode.TYPE_MISMATCH,
-      errorMessage: 'Switchboard v2.0 supports boolean flags only',
-    };
+    const details = await this.client.getObjectDetails(
+      flagKey,
+      defaultValue as unknown as object,
+      context,
+    );
+
+    return toResolution(details as EvaluationDetails<T>);
   }
 }
