@@ -58,3 +58,15 @@ legacy `/api/flags` DELETE, project/environment deletion, and API-key changes.
 
 Implement directly; small commits; independent review round if the provider
 cooperates.
+
+## Status (2026-10-21)
+
+Landed on `main` in `6443faf`: repository delete + cascade, project-scoped
+route, project/key schema, per-project legacy-ID sequence (migration 005),
+SQLite/Postgres/HTTP tests, and docs.
+
+Tests: flags 10/10, Postgres 5/5, full suite 143 (139 pass, 4 Postgres skips).
+Real output is recorded in `docs/EVIDENCE.md` under "v2.1 flag deletion".
+
+Still out of scope: rename, soft delete/restore, audit log, UI delete control,
+legacy DELETE, project/environment deletion, and API-key changes.

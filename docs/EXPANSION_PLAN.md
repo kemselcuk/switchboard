@@ -299,5 +299,6 @@ Task 086 (`docs/tasks/086-flag-deletion.md`) adds project-scoped flag deletion.
 | 15.2 | Cascade + isolation | All environment configs removed; same key in another project unaffected; API keys untouched |
 | 15.3 | Lifecycle semantics | No rename/soft delete; recreation gets a new UUID and next per-project `legacy_id`; OFREP/legacy reads reflect deletion |
 
-Out of scope: restore/audit, UI delete control, legacy DELETE, and
-project/environment deletion.
+Landed on `main` in `6443faf`; see the task status for test evidence. Out of
+scope: restore/audit, UI delete control, legacy DELETE, and project/environment
+deletion.

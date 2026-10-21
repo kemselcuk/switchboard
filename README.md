@@ -29,6 +29,7 @@ project isolation, 20%→40% monotonicity, two services, and the legacy API.
 - Legacy `/api/flags` and `/api/evaluate` continue to work.
 - SQLite → Postgres migration for existing flags.
 - Versioned JSON configuration export/import (API keys excluded).
+- Project-scoped flag deletion with cascading environment configs.
 - Dependency-free Prometheus `/metrics` endpoint.
 
 Targeting rules/segments, string/number/JSON flag types, a full admin dashboard,
@@ -171,6 +172,7 @@ Management endpoints require `Authorization: Bearer <ADMIN_TOKEN>`.
 | `POST/GET` | `/api/v1/projects/:project/environments` | Create/list environments |
 | `POST/GET` | `/api/v1/projects/:project/environments/:env/flags` | Create/list flags |
 | `GET/PATCH` | `/api/v1/projects/:project/environments/:env/flags/:key` | Get/update a flag |
+| `DELETE` | `/api/v1/projects/:project/flags/:key` | Delete a flag and all environment configs |
 | `POST/GET` | `/api/v1/projects/:project/environments/:env/api-keys` | Create/list API keys |
 | `DELETE` | `/api/v1/projects/:project/environments/:env/api-keys/:id` | Revoke an API key |
 
@@ -253,6 +255,9 @@ The original API is unchanged:
 - `POST/GET/PATCH /api/flags`
 - `POST /api/evaluate`
 
+The legacy API has no delete endpoint. A project-scoped delete removes the flag
+from every environment, so legacy reads and OFREP return `FLAG_NOT_FOUND`.
+
 In v2 mode, legacy routes map to the seeded `default` / `production`
 project/environment and keep the v1 bucket algorithm. In v1 mode, they use the
 original SQLite repository.
@@ -297,6 +302,21 @@ npm run migrate:legacy
 The script copies flags into the default project/environment, preserves
 settings and timestamps, and is idempotent. See
 [`docs/MIGRATION.md`](docs/MIGRATION.md) for the full procedure.
+
+## Flag lifecycle
+
+Flag keys are immutable: there is no rename (ADR-006). Deleting a flag is a
+project-scoped admin operation:
+
+```bash
+curl -sS -X DELETE "$BASE/api/v1/projects/checkout/flags/new-checkout" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+It removes the flag and every environment config in one cascade; API keys are
+untouched. Deletion is irreversible, so export a backup first. Recreating the
+same key creates a new UUID and the next per-project numeric `legacy_id`; IDs
+are never reused (`flag_legacy_sequences`).
 
 ## Configuration export/import
 
@@ -381,7 +401,7 @@ that database and does not delete them (v2.0 has no project/flag deletion);
 point it at a dedicated benchmark database. Numbers are from one run and are
 directional, not a capacity guarantee.
 
-Current local suite: 141 tests, 137 pass, 4 skipped when `DATABASE_URL` is not
+Current local suite: 143 tests, 139 pass, 4 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)

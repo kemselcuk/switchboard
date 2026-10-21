@@ -553,6 +553,51 @@ npm test
 ℹ todo 0
 ```
 
+### v2.1 flag deletion
+
+Task 086 adds project-scoped flag deletion. Deleting removes every environment
+config via the FK cascade, leaves API keys intact, and never reuses numeric
+legacy IDs (per-project sequence).
+
+```text
+node --test test/v2/flags.test.js
+✔ creates and lists flags with percentage precision
+✔ supports the same flag key in two environments
+✔ exposes per-project numeric legacy ids on the legacy API
+✔ patches flag description, enabled state and rollout
+✔ rejects duplicate flags in the same environment
+✔ isolates flags by project
+✔ does not mutate another environment on a failed description-only PATCH
+✔ validates rollout precision and unknown flags
+✔ deletes a flag and all environment configs without touching other projects
+✔ validates flag deletion requests
+ℹ tests 10
+ℹ pass 10
+ℹ fail 0
+```
+
+```text
+DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run test:db
+✔ maps a Postgres storage failure to 503
+✔ Postgres migrations and v2 evaluation flow
+✔ Postgres covers migration, legacy routes, isolation and revocation
+✔ Postgres exports and re-imports configuration
+✔ Postgres flag deletion removes every environment config
+ℹ tests 5
+ℹ pass 5
+```
+
+```text
+npm test
+ℹ tests 143
+ℹ suites 0
+ℹ pass 139
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 4
+ℹ todo 0
+```
+
 ## Historical v1 evidence
 
 ## 1. Automated tests

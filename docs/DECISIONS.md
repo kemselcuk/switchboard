@@ -475,3 +475,30 @@ request paths are never used. The endpoint is public like `/healthz`, returns
 - The public endpoint reveals aggregate traffic volume but no tenant data.
 - OpenTelemetry, dashboards, alert rules, exemplars, and tracing remain out of
   scope.
+
+## ADR-027 — Project-scoped flag deletion with stable numeric IDs
+
+**Context:** v2.0 could create and update flags but not remove them. Flags are
+project-wide with one config per environment, so an environment-scoped delete
+would leave confusing half-deleted state. Existing v1 clients also expect
+numeric IDs not to be reused.
+
+**Decision:** Add `DELETE /api/v1/projects/:project/flags/:key` (ADMIN_TOKEN).
+It deletes the `flags` row; the foreign-key cascade removes every
+`flag_configs` row. A missing project/flag returns 404, an invalid key 400, and
+missing auth 401. There is no rename, soft delete, restore, legacy DELETE, or UI
+control. API keys are untouched. Migration
+`005_flag_legacy_sequences.mjs` adds a per-project `flag_legacy_sequences`
+table; allocation updates it atomically with `RETURNING`, so recreating a flag
+gets a new UUID and the next `legacy_id` even after deleting the last flag.
+The v1 migration reserves preserved IDs and advances the sequence.
+
+**Consequences:**
+- Deletion is one project-wide, irreversible operation; export a backup first.
+- OFREP/legacy reads return `FLAG_NOT_FOUND` after deletion; existing API keys
+  still authenticate.
+- Numeric IDs are never reused per project; old client caches cannot collide
+  with a different flag.
+- The extra sequence table is internal and not exposed by the API.
+- Audit/restore/soft delete and project/environment deletion remain out of
+  scope.
