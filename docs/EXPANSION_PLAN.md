@@ -18,7 +18,7 @@ OpenFeature provider.
 | SDK | Node/TypeScript SDK + OpenFeature provider |
 | API compatibility | `/api` stays; new `/api/v1` and `/ofrep/v1` |
 | First release | `v2.0.0`: boolean flags + percentage rollout |
-| Later | Targeting rules/segments, dashboard, audit/RBAC |
+| Later | Dashboard, audit/RBAC, browser SDK, streaming |
 | Cost | €0 additional infrastructure; existing Go subscription |
 
 ## 2. Domain model
@@ -353,6 +353,8 @@ Implemented on `feature/targeting-rules`:
 - `5269411` — first-match evaluation, `TARGETING_MATCH`, ETag input.
 - `2facf9c` — segment/rule export and import (format version stays `1`).
 - `76b26c6` — SQLite, OFREP contract and Postgres coverage.
+- `64df1e0` — review fixes: full-context ETag, rule shape, body limit,
+  database checks, concurrency handling, import semantics.
 
 Acceptance mapping: 18.1 project-scoped segments with immutable keys and
 ANDed `eq` conditions (0..20); 18.2 ordered first-match rules per flag and

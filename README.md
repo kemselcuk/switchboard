@@ -262,16 +262,19 @@ type returns `409 FLAG_TYPE_MISMATCH`. Limits: strings are at most 4096
 characters, numbers must be finite, and `json` values must be plain objects
 that serialize to at most 8192 bytes (arrays and `null` are rejected). Boolean
 flags reject on/off values and keep their existing behavior. The legacy
-`/api/flags` API stays boolean-only and ignores non-boolean flags. Request
-bodies are capped at 32 KiB, enough for two maximum-size JSON values; the bulk
-SDK cache clones object values on read so callers cannot mutate cached state.
+`/api/flags` API stays boolean-only and ignores non-boolean flags. Flag request
+bodies are capped at 32 KiB, enough for two maximum-size JSON values; the rules
+`PUT` route has a larger cap (see targeting below). The bulk SDK cache clones
+object values on read so callers cannot mutate cached state.
 
 ### Targeting rules and segments
 
 A segment is project-scoped and groups an ordered list of at most 20 ANDed
-conditions. A condition has an `attribute`, the operator `eq`, and a primitive
-`value` (string up to 256 characters, finite number, or boolean). Condition
-lists may be empty, which matches every context.
+conditions. A condition has an `attribute` (1..64 characters), the operator
+`eq`, and a primitive `value` (string up to 256 characters, finite number, or
+boolean). Condition lists may be empty, which matches every context. Segment
+keys are unique per project and immutable; `PUT` replaces the name and
+conditions.
 
 ```bash
 curl -sS -X POST "$BASE/api/v1/projects/checkout/segments" \
@@ -296,7 +299,12 @@ Evaluation order is disabled → first matching rule (`TARGETING_MATCH`, variant
 typed (`"1"` does not match `1`), a missing attribute does not match, and
 `targetingKey` is available as a normal string attribute. The legacy
 `/api/flags` and `/api/evaluate` APIs ignore rules. Bulk OFREP ETags change when
-rules or segments change.
+rules or segments change and are scoped to a canonical fingerprint of the full
+evaluation context. The rules `PUT` route accepts up to 2 MiB so a maximum
+50-rule by 20-condition list fits; other admin routes keep the 32 KiB cap.
+Direct OFREP does not inject a default `targetingKey`; the Node SDK normalizes an
+omitted key to `anonymous` before sending for rollout compatibility. Concurrent
+replacement of the same rule list can return `409 RULE_CONFLICT`; retry.
 
 ### OFREP evaluation
 
@@ -428,15 +436,17 @@ To write JSON to stdout instead of a file, use
 `npm run --silent export:config` (the npm banner would otherwise corrupt the
 JSON) or call `node scripts/export-config.mjs` directly.
 
-Import is additive and idempotent: it creates missing projects, environments,
-and flags, updates flag descriptions and configs, and never deletes or renames
-anything. Segments are upserted by project key; rules are replaced when a flag
-carries a `rules` array. A missing `segments` or `rules` field means "none", so
-pre-targeting exports remain valid. Unknown segment references abort the whole
-import. API keys must be recreated on the target instance. `--dry-run`
-validates and reports counts without persisting configuration rows; on a fresh
-path the database file/schema and default project may still be bootstrapped.
-The format is
+Import is additive for projects, environments, flags, and segments, and
+idempotent: it creates missing definitions, updates flag descriptions and
+configs, and never deletes or renames projects, environments, flags, or
+segments. Segments are upserted by project key; rules are replaced when a flag
+carries a `rules` array (an empty array clears that flag's list). A missing
+`segments` or `rules` field means the export defines none; it does not clear
+existing rules. Pre-targeting exports remain valid. Unknown segment references
+abort the whole import. API keys must be recreated on the target instance.
+`--dry-run` validates and reports counts without persisting configuration rows;
+on a fresh path the database file/schema and default project may still be
+bootstrapped. The format is
 `switchboard-v2-export` version `1`; flags are listed per environment only when
 a config exists there.
 
@@ -478,8 +488,8 @@ or raw paths.
   route label is the Fastify template (for example `/api/flags/:key`).
 - `switchboard_http_request_duration_seconds` — histogram with fixed buckets.
 - `switchboard_flag_evaluations_total{result}` — OFREP and legacy evaluation
-  reasons (`SPLIT`, `DISABLED`, `BUCKET_INCLUDED`, ...); `FLAG_NOT_FOUND` is
-  counted for legacy and single-flag OFREP lookups.
+  reasons (`SPLIT`, `TARGETING_MATCH`, `DISABLED`, `BUCKET_INCLUDED`, ...);
+  `FLAG_NOT_FOUND` is counted for legacy and single-flag OFREP lookups.
 - `switchboard_db_failures_total` — responses mapped to `503`.
 
 Example scrape:

@@ -83,6 +83,8 @@ Implemented on `feature/targeting-rules`:
   `TARGETING_MATCH` results, bulk ETag coverage for rules and segments.
 - `2facf9c` — export/import of segments and rules with format version `1`.
 - `76b26c6` — SQLite, OFREP contract and Postgres tests.
+- `64df1e0` — review fixes: full-context ETag, exactly-one rule shape, body
+  limit, database checks, concurrency response, import tests.
 - Final docs commit — README, ADR-030, expansion plan, evidence, this status.
 
 Behavior notes: condition lists use 0..20 ANDed `eq` conditions (an empty list
@@ -96,8 +98,16 @@ remain boolean-only and ignore rules. Import is additive; a missing
 Final real output is in `docs/EVIDENCE.md` under "v2.1 targeting rules
 (Task 090)":
 
-- `npm test`: 181 tests, 174 pass, 7 Postgres skips.
+- `npm test`: 187 tests, 180 pass, 7 Postgres skips.
 - `npm run test:contract`: 13/13.
 - `npm run test:workspaces`: provider 8/8, SDK 34/34.
 - `npm run test:db`: 7/7 on Postgres, including segment/rule storage and
   evaluation, ETag changes, `SEGMENT_IN_USE`, and cascade after flag deletion.
+
+The independent review round found and the branch fixes: the bulk ETag now
+covers a canonical fingerprint of the full evaluation context (so different
+contexts never share a `304`), segment rules keep only `segmentKey` internally,
+the rules `PUT` route accepts a 2 MiB body for the 50×20 maximum, the migration
+constrains action/position as well as the rule target, concurrent replacements
+return `409 RULE_CONFLICT`, and import documentation now states that present
+`rules` arrays replace lists while missing fields leave them untouched.

@@ -314,7 +314,9 @@ OFREP has no 503 in the vendored spec; storage failures intentionally use
 `503` with `errorDetails` so callers can distinguish availability from a flag
 decision. Bulk ETags are quoted, based on project key, flag keys, targeting key,
 rollout, and enabled state; `If-None-Match` accepts quoted or unquoted values,
-and `304` repeats the `ETag` header.
+and `304` repeats the `ETag` header. ADR-030 extends the ETag input with a
+canonical fingerprint of the full evaluation context plus ordered rules and
+project segments once targeting is enabled.
 
 **Consequences:**
 - Official OFREP providers can parse errors and cache validators.
@@ -433,18 +435,23 @@ Copying API keys would move secrets between instances and is not acceptable.
 `src/v2/repositories/transfer.js` and exposed through
 `npm run export:config` / `npm run import:config`. Keys are the identity; UUIDs
 and legacy IDs are not exported. Import is additive and idempotent inside one
-transaction: it creates missing projects/environments/flags, updates flag
-descriptions and configs, and never deletes or renames. A `--dry-run` performs
-validation and counts, then rolls back the configuration writes; on a fresh path
-the schema and default project may still be bootstrapped. No API-key, hash,
-prefix, or secret field is exported or imported. This is a CLI, not an HTTP
-endpoint.
+transaction: it creates missing projects/environments/flags, upserts segments by
+project key, updates flag descriptions and configs, and replaces a flag's rule
+list only when the incoming flag carries a `rules` array (an empty array clears
+that list). It never deletes or renames projects, environments, flags, or
+segments. A `--dry-run` performs validation and counts, then rolls back the
+configuration writes; on a fresh path the schema and default project may still
+be bootstrapped. No API-key, hash, prefix, or secret field is exported or
+imported. This is a CLI, not an HTTP endpoint.
 
 **Consequences:**
 - Backups and CI seeds are portable between SQLite and Postgres instances;
   both dialects are covered by tests.
 - API keys must be created separately on the target instance.
-- Imports do not remove definitions that are absent from the file.
+- Imports do not remove projects, environments, flags, or segments that are
+  absent from the file. Rule lists that are present replace the target list for
+  that flag/environment; a v2.1 export with `rules: []` intentionally clears
+  the target's rules.
 - The format is versioned; incompatible versions are rejected before any write.
 - The CLI reads `DATABASE_URL` or `V2_DB_PATH`, matching the server.
 - Export runs per-environment read queries without a repeatable-read snapshot;
@@ -625,17 +632,19 @@ to rules; segments use a restrictive reference and the API returns
 `409 SEGMENT_IN_USE` while any rule references them. Deleting a flag removes
 all of its rules in every environment.
 
-The bulk OFREP ETag includes each flag's ordered rule list and the project's
-segments, so rule edits, rule clears, segment edits, creation, and deletion
-change the validator. Single-flag evaluation applies the same rules but has no
-ETag.
+The bulk OFREP ETag includes a canonical fingerprint of the full evaluation
+context, each flag's ordered rule list, and the project's segments, so context
+changes, rule edits, rule clears, segment edits, creation, and deletion change
+the validator. Single-flag evaluation applies the same rules but has no ETag.
+The rules `PUT` route accepts up to 2 MiB so a maximum 50-rule by 20-condition
+list fits; other admin routes keep the 32 KiB request cap.
 
 Export/import keeps format `switchboard-v2-export` version `1`: projects gain
 an optional `segments` array and flags gain an optional ordered `rules` array.
 A missing array means "none", so pre-targeting exports remain valid. Import is
-still additive; rules are replaced only when a flag carries the `rules` field,
-and unknown segment references reject the whole transaction with
-`INVALID_EXPORT`.
+additive for projects, environments, flags, and segments; rules are replaced
+only when a flag carries the `rules` field (an empty array clears that list).
+Unknown segment references reject the whole transaction with `INVALID_EXPORT`.
 
 The legacy `/api/flags` and `/api/evaluate` paths stay boolean-only and ignore
 rules entirely.
@@ -649,4 +658,7 @@ rules entirely.
 - Rules are per environment, so production and staging can target differently.
 - ETag invalidation is conservative: editing any segment in the project
   invalidates bulk evaluation caches even if no rule references it.
+- The Node SDK normalizes an omitted `targetingKey` to `anonymous` before
+  sending for rollout compatibility; direct OFREP requests do not inject it, so
+  a rule matching `targetingKey = "anonymous"` differs between those paths.
 - Targeting decisions are not audit events, analytics, or authorization.
