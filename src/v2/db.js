@@ -23,14 +23,20 @@ const MIGRATION_FOLDER = fileURLToPath(
   new URL('../../db/migrations', import.meta.url),
 );
 
+const MAX_POOL_MAX = 1000;
+
 export function parsePoolMax(value) {
-  if (value === undefined || value === null) {
+  let parsed;
+
+  if (typeof value === 'number') {
+    parsed = value;
+  } else if (typeof value === 'string' && /^[1-9][0-9]*$/.test(value)) {
+    parsed = Number(value);
+  } else {
     return undefined;
   }
 
-  const parsed = Number(value);
-
-  if (!Number.isInteger(parsed) || parsed < 1) {
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > MAX_POOL_MAX) {
     return undefined;
   }
 
@@ -58,6 +64,7 @@ export function createDatabase({
     return {
       db,
       dialect: 'postgres',
+      pool,
       destroy: () => db.destroy(),
     };
   }
