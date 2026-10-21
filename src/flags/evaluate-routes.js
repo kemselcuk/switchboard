@@ -24,6 +24,8 @@ export async function evaluateRoutes(app) {
       }
 
       if (!flag) {
+        app.metrics.recordEvaluation('FLAG_NOT_FOUND');
+
         return {
           flagKey,
           userId,
@@ -35,6 +37,8 @@ export async function evaluateRoutes(app) {
       }
 
       const { bucket, enabled, reason } = evaluateFlag(flag, userId);
+
+      app.metrics.recordEvaluation(reason);
 
       return {
         flagKey,

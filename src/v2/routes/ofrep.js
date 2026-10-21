@@ -127,6 +127,8 @@ export async function ofrepRoutes(app, { db }) {
         context,
       });
 
+      app.metrics.recordEvaluation(result.reason);
+
       return evaluationResponse(flag, result);
     },
   );
@@ -151,6 +153,8 @@ export async function ofrepRoutes(app, { db }) {
           flag,
           context,
         });
+
+        app.metrics.recordEvaluation(result.reason);
 
         return evaluationResponse(flag, result);
       });

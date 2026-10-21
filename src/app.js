@@ -4,6 +4,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { sql } from 'kysely';
 import { openDatabase } from './db.js';
+import { createMetrics, METRICS_CONTENT_TYPE } from './metrics.js';
 import {
   ERROR_CODES,
   normalizeError,
@@ -110,6 +111,28 @@ export function buildApp({
   }
   app.decorate('repository', flagRepository);
 
+  const metrics = createMetrics();
+
+  app.decorate('metrics', metrics);
+
+  app.addHook('onRequest', async (request) => {
+    request.metricsStartedAt = process.hrtime.bigint();
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    const started = request.metricsStartedAt;
+    const durationSeconds = typeof started === 'bigint'
+      ? Number(process.hrtime.bigint() - started) / 1e9
+      : 0;
+    const route = request.routeOptions?.url ?? 'unknown';
+
+    metrics.recordHttpRequest({
+      method: request.method,
+      route,
+      status: reply.statusCode,
+      durationSeconds,
+    });
+  });
+
   if (db) {
     app.addHook('onClose', async () => {
       if (db.open) {
@@ -125,6 +148,10 @@ export function buildApp({
       request.log.error(error);
     }
 
+    if (statusCode === 503) {
+      metrics.recordDbFailure();
+    }
+
     return sendError(reply, statusCode, code, message);
   });
 
@@ -136,6 +163,11 @@ export function buildApp({
   ));
 
   app.get('/healthz', async () => ({ status: 'ok' }));
+
+  app.get('/metrics', async (_request, reply) => reply
+    .header('cache-control', 'no-store')
+    .type(METRICS_CONTENT_TYPE)
+    .send(metrics.render()));
 
   app.get('/readyz', async (request, reply) => {
     const probe = v2
