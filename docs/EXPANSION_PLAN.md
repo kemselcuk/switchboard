@@ -288,3 +288,16 @@ endpoint.
 Landed on `main` in `d5ccbba`; see the task status for test evidence. No
 OpenTelemetry, dashboards, alert rules, persistent metrics, or `/metrics`
 authentication in this track.
+
+## 15. v2.1 lifecycle track (approved)
+
+Task 086 (`docs/tasks/086-flag-deletion.md`) adds project-scoped flag deletion.
+
+| ID | Item | Acceptance |
+|---|---|---|
+| 15.1 | Delete endpoint | `DELETE /api/v1/projects/:project/flags/:key`; 200/404/401 envelope |
+| 15.2 | Cascade + isolation | All environment configs removed; same key in another project unaffected; API keys untouched |
+| 15.3 | Lifecycle semantics | No rename/soft delete; recreation gets a new UUID and next per-project `legacy_id`; OFREP/legacy reads reflect deletion |
+
+Out of scope: restore/audit, UI delete control, legacy DELETE, and
+project/environment deletion.
