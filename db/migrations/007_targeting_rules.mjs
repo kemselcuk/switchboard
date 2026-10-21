@@ -41,6 +41,14 @@ export async function up(db) {
       sql`(segment_id is not null and conditions is null)
         or (segment_id is null and conditions is not null)`,
     )
+    .addCheckConstraint(
+      'flag_rules_action_check',
+      sql`action in ('on', 'off')`,
+    )
+    .addCheckConstraint(
+      'flag_rules_position_check',
+      sql`position >= 0`,
+    )
     .addForeignKeyConstraint(
       'flag_rules_flag_fk',
       ['flag_id'],

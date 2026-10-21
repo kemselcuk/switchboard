@@ -4,6 +4,7 @@ export const MAX_SEGMENT_CONDITIONS = 20;
 export const MAX_FLAG_RULES = 50;
 export const MAX_ATTRIBUTE_LENGTH = 64;
 export const MAX_CONDITION_STRING_LENGTH = 256;
+export const MAX_RULES_BODY_BYTES = 2 * 1024 * 1024;
 export const CONDITION_OPERATORS = Object.freeze(['eq']);
 export const RULE_ACTIONS = Object.freeze(['on', 'off']);
 
@@ -163,6 +164,26 @@ function conditionsForRule(rule, segments) {
   const segment = segments.find((entry) => entry.key === rule.segmentKey);
 
   return Array.isArray(segment?.conditions) ? segment.conditions : null;
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalize(value[key])]),
+    );
+  }
+
+  return value;
+}
+
+export function contextFingerprint(context) {
+  return JSON.stringify(canonicalize(context ?? {}));
 }
 
 export function firstMatchingRule(rules, segments, context) {

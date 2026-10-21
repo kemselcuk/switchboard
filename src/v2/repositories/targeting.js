@@ -24,15 +24,18 @@ function mapSegment(row) {
 }
 
 function mapRule(row) {
-  const hasSegment = typeof row.segment_key === 'string';
+  if (typeof row.segment_key === 'string') {
+    return {
+      position: row.position,
+      action: row.action,
+      segmentKey: row.segment_key,
+    };
+  }
 
   return {
     position: row.position,
     action: row.action,
-    segmentKey: hasSegment ? row.segment_key : undefined,
-    conditions: parseConditions(
-      hasSegment ? row.segment_conditions : row.inline_conditions,
-    ),
+    conditions: parseConditions(row.inline_conditions),
   };
 }
 
@@ -47,7 +50,6 @@ function ruleQuery(db, projectId, environmentId) {
       'flag_rules.action',
       'flag_rules.conditions as inline_conditions',
       'segments.key as segment_key',
-      'segments.conditions as segment_conditions',
     ])
     .where('flag_rules.environment_id', '=', environmentId)
     .where('flags.project_id', '=', projectId);
@@ -215,55 +217,65 @@ export function createTargetingRepository(db) {
     ];
     const now = new Date().toISOString();
 
-    await db.transaction().execute(async (trx) => {
-      const segments = segmentKeys.length === 0
-        ? []
-        : await trx
-          .selectFrom('segments')
-          .select(['id', 'key'])
-          .where('project_id', '=', projectId)
-          .where('key', 'in', segmentKeys)
-          .execute();
-      const byKey = new Map(segments.map((segment) => [segment.key, segment.id]));
-      const missing = segmentKeys.find((key) => !byKey.has(key));
+    try {
+      await db.transaction().execute(async (trx) => {
+        const segments = segmentKeys.length === 0
+          ? []
+          : await trx
+            .selectFrom('segments')
+            .select(['id', 'key'])
+            .where('project_id', '=', projectId)
+            .where('key', 'in', segmentKeys)
+            .execute();
+        const byKey = new Map(segments.map((segment) => [segment.key, segment.id]));
+        const missing = segmentKeys.find((key) => !byKey.has(key));
 
-      if (missing) {
-        throw new AppError(
-          400,
-          'VALIDATION_ERROR',
-          `Segment '${missing}' not found in this project`,
+        if (missing) {
+          throw new AppError(
+            400,
+            'VALIDATION_ERROR',
+            `Segment '${missing}' not found in this project`,
+          );
+        }
+
+        await trx
+          .deleteFrom('flag_rules')
+          .where('flag_id', '=', flagId)
+          .where('environment_id', '=', environmentId)
+          .execute();
+
+        if (rules.length === 0) {
+          return;
+        }
+
+        await trx
+          .insertInto('flag_rules')
+          .values(rules.map((rule, position) => ({
+            id: randomUUID(),
+            flag_id: flagId,
+            environment_id: environmentId,
+            position,
+            segment_id: rule.segmentKey === undefined
+              ? null
+              : byKey.get(rule.segmentKey),
+            conditions: rule.segmentKey === undefined
+              ? JSON.stringify(rule.conditions)
+              : null,
+            action: rule.action,
+            created_at: now,
+            updated_at: now,
+          })))
+          .execute();
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) || isForeignKeyViolation(error)) {
+        throw conflict(
+          'RULE_CONFLICT',
+          'Rules or segments changed concurrently; retry the request',
         );
       }
-
-      await trx
-        .deleteFrom('flag_rules')
-        .where('flag_id', '=', flagId)
-        .where('environment_id', '=', environmentId)
-        .execute();
-
-      if (rules.length === 0) {
-        return;
-      }
-
-      await trx
-        .insertInto('flag_rules')
-        .values(rules.map((rule, position) => ({
-          id: randomUUID(),
-          flag_id: flagId,
-          environment_id: environmentId,
-          position,
-          segment_id: rule.segmentKey === undefined
-            ? null
-            : byKey.get(rule.segmentKey),
-          conditions: rule.segmentKey === undefined
-            ? JSON.stringify(rule.conditions)
-            : null,
-          action: rule.action,
-          created_at: now,
-          updated_at: now,
-        })))
-        .execute();
-    });
+      throw error;
+    }
 
     return listRules(projectId, environmentId, flagId);
   }

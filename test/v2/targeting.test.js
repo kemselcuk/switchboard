@@ -171,6 +171,21 @@ test('rejects duplicate segment keys and keeps keys immutable', async (t) => {
 
   await createProject(app, 'other', 'Other');
   assert.equal((await createSegment(app, beta, 'other')).statusCode, 201);
+  assert.equal((await getSegment(app, 'beta-users', 'other')).statusCode, 200);
+  assert.equal((await createSegment(app, {
+    key: 'other-only',
+    name: 'Other only',
+    conditions: [],
+  }, 'other')).statusCode, 201);
+  assert.equal((await getSegment(app, 'other-only', 'demo')).statusCode, 404);
+
+  const crossProjectDelete = await app.inject({
+    method: 'DELETE',
+    url: '/api/v1/projects/demo/segments/other-only',
+    headers: AUTHORIZATION,
+  });
+
+  assert.equal(crossProjectDelete.statusCode, 404);
 });
 
 test('validates segment conditions', async (t) => {
@@ -337,6 +352,26 @@ test('replaces ordered rules and clears them with an empty list', async (t) => {
   const cleared = await putRules(app, 'checkout', []);
   assert.deepEqual(cleared.json().rules, []);
   assert.deepEqual((await getRules(app, 'checkout')).json().rules, []);
+});
+
+test('accepts a full 50-rule list above the default body cap', async (t) => {
+  const { app } = await setup(t);
+
+  await createFlag(app, 'demo', 'production', { key: 'checkout' });
+
+  const rules = Array.from({ length: 50 }, (_, ruleIndex) => ({
+    conditions: Array.from({ length: 20 }, (_, conditionIndex) => ({
+      attribute: `attr-${ruleIndex}-${conditionIndex}`,
+      operator: 'eq',
+      value: 'x'.repeat(64),
+    })),
+    action: 'on',
+  }));
+  const response = await putRules(app, 'checkout', rules);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().rules.length, 50);
+  assert.equal(response.json().rules[0].conditions.length, 20);
 });
 
 test('validates rules and segment references', async (t) => {
@@ -534,6 +569,25 @@ test('treats targetingKey as a normal string attribute', async (t) => {
 
   const numeric = await evaluate(app, key, 'checkout', 42);
   assert.equal(numeric.statusCode, 400);
+
+  await putRules(app, 'checkout', [
+    {
+      conditions: [
+        { attribute: 'targetingKey', operator: 'eq', value: 'anonymous' },
+      ],
+      action: 'on',
+    },
+  ]);
+
+  const missing = await evaluate(app, key, 'checkout', {});
+  assert.equal(missing.json().reason, 'SPLIT');
+  assert.equal(missing.json().value, false);
+
+  const explicitAnonymous = await evaluate(app, key, 'checkout', {
+    targetingKey: 'anonymous',
+  });
+  assert.equal(explicitAnonymous.json().reason, 'TARGETING_MATCH');
+  assert.equal(explicitAnonymous.json().value, true);
 });
 
 test('disabled takes precedence over a matching rule', async (t) => {
@@ -681,6 +735,63 @@ test('bulk ETag changes on rule and segment edits', async (t) => {
     { targetingKey: 'user-1' },
   );
   assert.notEqual(afterSegmentDelete.headers.etag, afterRuleClear.headers.etag);
+});
+
+test('bulk ETag is scoped to the full evaluation context', async (t) => {
+  const { app, key } = await setup(t);
+
+  await createFlag(app, 'demo', 'production', {
+    key: 'checkout',
+    enabled: true,
+    rolloutPercentage: 0,
+  });
+  await putRules(app, 'checkout', [
+    {
+      conditions: [{ attribute: 'plan', operator: 'eq', value: 'beta' }],
+      action: 'on',
+    },
+  ]);
+
+  const beta = await evaluateBulk(app, key, {
+    targetingKey: 'user-1',
+    plan: 'beta',
+  });
+  const free = await evaluateBulk(app, key, {
+    targetingKey: 'user-1',
+    plan: 'free',
+  });
+
+  assert.equal(beta.json().flags[0].value, true);
+  assert.equal(free.json().flags[0].value, false);
+  assert.notEqual(beta.headers.etag, free.headers.etag);
+
+  const staleValidator = await evaluateBulk(
+    app,
+    key,
+    { targetingKey: 'user-1', plan: 'free' },
+    beta.headers.etag,
+  );
+
+  assert.equal(staleValidator.statusCode, 200);
+  assert.equal(staleValidator.json().flags[0].value, false);
+
+  const reordered = await evaluateBulk(app, key, {
+    plan: 'free',
+    targetingKey: 'user-1',
+  });
+
+  assert.equal(reordered.headers.etag, free.headers.etag);
+
+  const missingTargetingKey = await evaluateBulk(app, key, { plan: 'free' });
+  const explicitAnonymous = await evaluateBulk(app, key, {
+    targetingKey: 'anonymous',
+    plan: 'free',
+  });
+
+  assert.notEqual(
+    missingTargetingKey.headers.etag,
+    explicitAnonymous.headers.etag,
+  );
 });
 
 test('bulk evaluation applies rules to each flag', async (t) => {
@@ -836,6 +947,37 @@ test('accepts exports without segments or rules', async (t) => {
   assert.deepEqual(rules, []);
 });
 
+test('a version-1 export with empty rules clears target rules', async (t) => {
+  const { app: sourceApp, v2: source } = await createV2App(t);
+
+  await createProject(sourceApp, 'demo', 'Demo');
+  await createEnvironment(sourceApp, 'demo');
+  await createFlag(sourceApp, 'demo', 'production', {
+    key: 'checkout',
+  });
+
+  const data = await exportConfiguration(source.db);
+  const demo = data.projects.find((project) => project.key === 'demo');
+  const exported = demo.environments[0].flags[0];
+
+  assert.deepEqual(exported.rules, []);
+
+  const { app, v2 } = await createV2App(t);
+
+  await createProject(app, 'demo', 'Demo');
+  await createEnvironment(app, 'demo');
+  await createFlag(app, 'demo', 'production', { key: 'checkout' });
+  assert.equal((await putRules(app, 'checkout', [
+    { conditions: [], action: 'on' },
+  ])).statusCode, 200);
+
+  const summary = await importConfiguration(v2.db, data);
+
+  assert.equal(summary.rulesReplaced, 1);
+  assert.equal(summary.rulesCreated, 0);
+  assert.deepEqual((await getRules(app, 'checkout')).json().rules, []);
+});
+
 test('rejects invalid segments and rules during import', async (t) => {
   const { v2 } = await setup(t);
   const base = {
@@ -904,7 +1046,10 @@ test('rejects invalid segments and rules during import', async (t) => {
   }
 
   const segments = await v2.db.selectFrom('segments').selectAll().execute();
+  const flags = await v2.db.selectFrom('flags').selectAll().execute();
+
   assert.deepEqual(segments, []);
+  assert.deepEqual(flags, []);
 });
 
 test('legacy evaluation ignores targeting rules', async (t) => {
@@ -996,6 +1141,75 @@ test('keeps targeting isolated per project and environment', async (t) => {
     headers: AUTHORIZATION,
   });
   assert.equal(missing.statusCode, 404);
+});
+
+test('keeps rules per environment within one project', async (t) => {
+  const { app, key } = await setup(t);
+
+  await createEnvironment(app, 'demo', 'staging', 'Staging');
+  await createFlag(app, 'demo', 'production', {
+    key: 'checkout',
+    enabled: true,
+    rolloutPercentage: 0,
+  });
+  await createFlag(app, 'demo', 'staging', {
+    key: 'checkout',
+    enabled: true,
+    rolloutPercentage: 0,
+  });
+  await putRules(app, 'checkout', [
+    {
+      conditions: [{ attribute: 'plan', operator: 'eq', value: 'beta' }],
+      action: 'on',
+    },
+  ]);
+
+  const stagingKey = await createApiKey(app, 'demo', 'staging');
+  const production = await evaluate(app, key, 'checkout', {
+    targetingKey: 'user-1',
+    plan: 'beta',
+  });
+  const staging = await evaluate(app, stagingKey.key, 'checkout', {
+    targetingKey: 'user-1',
+    plan: 'beta',
+  });
+
+  assert.equal(production.json().reason, 'TARGETING_MATCH');
+  assert.equal(production.json().value, true);
+  assert.equal(staging.json().reason, 'SPLIT');
+  assert.equal(staging.json().value, false);
+  assert.deepEqual(
+    (await getRules(app, 'checkout', 'staging')).json().rules,
+    [],
+  );
+});
+
+test('targeting admin routes require the admin token', async (t) => {
+  const { app } = await setup(t);
+  const requests = [
+    ['GET', '/api/v1/projects/demo/segments'],
+    ['POST', '/api/v1/projects/demo/segments', {
+      key: 'no-auth',
+      name: 'No auth',
+      conditions: [],
+    }],
+    [
+      'GET',
+      '/api/v1/projects/demo/environments/production/flags/missing/rules',
+    ],
+    [
+      'PUT',
+      '/api/v1/projects/demo/environments/production/flags/missing/rules',
+      { rules: [] },
+    ],
+  ];
+
+  for (const [method, url, payload] of requests) {
+    const response = await app.inject({ method, url, payload });
+
+    assert.equal(response.statusCode, 401, `${method} ${url}`);
+    assert.equal(response.json().error.code, 'UNAUTHORIZED');
+  }
 });
 
 test('the evaluator resolves raw segment references and first match', () => {

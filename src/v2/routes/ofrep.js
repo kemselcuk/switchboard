@@ -9,6 +9,7 @@ import {
   ofrepEvaluationBody,
   ofrepFlagParams,
 } from '../schemas.js';
+import { contextFingerprint } from '../targeting.js';
 
 function ruleSignature(rule) {
   return {
@@ -18,10 +19,9 @@ function ruleSignature(rule) {
   };
 }
 
-function evaluationKey(flag, context) {
+function evaluationKey(flag) {
   return [
     flag.key,
-    context?.targetingKey ?? 'anonymous',
     flag.rolloutBasisPoints,
     flag.enabled,
     flag.type,
@@ -37,9 +37,12 @@ function etagFor(projectKey, flags, context, segments) {
     name: segment.name,
     conditions: segment.conditions,
   })));
-  const value = `${projectKey}|${segmentKey}|${flags
-    .map((flag) => evaluationKey(flag, context))
-    .join('|')}`;
+  const value = [
+    projectKey,
+    contextFingerprint(context),
+    segmentKey,
+    flags.map(evaluationKey).join('|'),
+  ].join('|');
 
   const hash = createHash('sha256')
     .update(value, 'utf8')

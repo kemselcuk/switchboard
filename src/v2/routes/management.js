@@ -21,7 +21,11 @@ import {
   updateFlagBody,
   updateSegmentBody,
 } from '../schemas.js';
-import { conditionsError, rulesError } from '../targeting.js';
+import {
+  conditionsError,
+  MAX_RULES_BODY_BYTES,
+  rulesError,
+} from '../targeting.js';
 
 function validationError(message) {
   return new AppError(400, 'VALIDATION_ERROR', message);
@@ -357,7 +361,10 @@ export async function managementRoutes(app, { db, adminToken }) {
 
   app.put(
     '/api/v1/projects/:project/environments/:env/flags/:key/rules',
-    { schema: { params: flagParams, body: replaceRulesBody } },
+    {
+      schema: { params: flagParams, body: replaceRulesBody },
+      bodyLimit: MAX_RULES_BODY_BYTES,
+    },
     async (request) => {
       const { project, environment } = await resolveEnvironment(request);
       const flag = await flags.getFlag(
