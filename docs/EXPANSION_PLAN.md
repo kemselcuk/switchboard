@@ -316,3 +316,19 @@ provider install outside the monorepo.
 
 Landed on `main` in `7d3f02f`; see the task status for test evidence. No
 registry automation, provenance, signing, or GitHub Packages in this track.
+
+## 17. v2.1 flag types track (approved)
+
+Task 088 (`docs/tasks/088-flag-types-server.md`) and Task 089 extend flags
+beyond boolean while keeping deterministic percentage rollout.
+
+| ID | Item | Acceptance |
+|---|---|---|
+| 17.1 | Types + values | `boolean`, `string`, `number`, `json` (plain object); immutable type; onValue/offValue for non-boolean |
+| 17.2 | Deterministic evaluation | Included → onValue, excluded/disabled → offValue; boolean semantics unchanged |
+| 17.3 | OFREP + management | Typed values/reasons/variants; ETag includes type/values; validation envelopes |
+| 17.4 | Legacy + transfer | Legacy stays boolean-only; export/import round-trips all types |
+| 17.5 | SDK/provider | Typed getters and OpenFeature resolution for string/number/object |
+
+Out of scope: targeting rules, variants/weights, UI controls, flag type changes,
+and non-boolean legacy API support.
