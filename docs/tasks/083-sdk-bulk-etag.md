@@ -18,7 +18,9 @@ Extend `SwitchboardClientOptions`:
 | Option | Default | Meaning |
 |---|---|---|
 | `bulkEvaluation` | `false` | Use `POST /ofrep/v1/evaluate/flags` and cache per context |
-| `pollingIntervalMs` | `30000` | Cache freshness window and background refresh interval; `0` disables both |
+| `cacheTtlMs` | `10000` | Freshness window; `0` disables caching (fetch on each call) |
+| `pollingIntervalMs` | `0` | Opt-in background refresh interval; `0` disables polling |
+| `maxCachedContexts` | `1000` | LRU bound on per-context entries (and their timers) |
 | `maxRetries` | `2` | Extra attempts for network errors and 5xx responses (total `maxRetries + 1`); 4xx are not retried |
 | `retryBaseDelayMs` | `100` | Exponential backoff base with jitter; tests set `0` |
 
@@ -29,13 +31,16 @@ Bulk behavior:
 
 - Cache key is the full evaluation context (stable key order), not only
   `targetingKey`.
+- The cache is bounded by `maxCachedContexts` with LRU eviction; evicted
+  entries have their polling timers cleared.
 - One in-flight bulk request per context; concurrent evaluations share it.
 - First evaluation performs the bulk request, stores all flags and the `ETag`.
-- While the cache is fresh (`pollingIntervalMs`), evaluations are served from
-  it with no HTTP request.
+- While the cache is fresh (`cacheTtlMs`), evaluations are served from it with
+  no HTTP request.
 - A stale cache triggers a conditional request with `If-None-Match`. `304`
   refreshes the cache timestamp and serves the cached flags; `200` replaces
-  the cache.
+  the cache. Background polling is opt-in (`pollingIntervalMs > 0`) and only
+  runs for the bounded LRU set.
 - A missing flag in a successful bulk response returns the default with
   `reason: 'ERROR'` and `errorCode: 'FLAG_NOT_FOUND'`.
 - A non-boolean flag value returns `TYPE_MISMATCH`.
@@ -48,8 +53,8 @@ Bulk behavior:
 ## Provider
 
 `SwitchboardProvider` enables `bulkEvaluation: true` by default (callers can
-override with `bulkEvaluation: false`). Implement `onClose()` to call
-`client.close()`. Provider tests must prove that evaluating two flags for the
+override with `bulkEvaluation: false`); polling stays off unless the caller
+sets `pollingIntervalMs`. Implement `onClose()` to call `client.close()`. Provider tests must prove that evaluating two flags for the
 same context results in one bulk HTTP request and that unknown flags still map
 to `FLAG_NOT_FOUND`.
 
@@ -61,8 +66,9 @@ persistent client cache, stale-if-error policies, and server changes.
 ## Acceptance criteria
 
 - SDK unit tests cover: one bulk request for two flags, ETag round-trip and
-  304 reuse, cache freshness, negative/non-boolean flags, retry on 5xx, no
-  retry on 401, timeout regression, and `close()` stopping polling.
+  304 reuse, cache freshness and TTL expiry, LRU eviction with
+  `maxCachedContexts`, negative/non-boolean flags, retry on 5xx, no retry on
+  401, timeout regression, and `close()` stopping polling.
 - Provider tests cover bulk-by-default and `onClose`.
 - `npm run test:workspaces` and `npm test` are green; `npm run test:contract`
   stays green.

@@ -246,9 +246,9 @@ OFREP endpoint that the server already supports:
 
 | ID | Item | Acceptance |
 |---|---|---|
-| 12.1 | SDK bulk + per-context cache | `bulkEvaluation` option; one request for many flags; full-context cache key |
+| 12.1 | SDK bulk + per-context cache | `bulkEvaluation` option; one request for many flags; full-context cache key; bounded LRU (`maxCachedContexts`) |
 | 12.2 | ETag conditional refresh | `If-None-Match` + `304` reuses the cache; `200` replaces it |
-| 12.3 | Polling + retries | Optional background polling (unref'ed timers, `close()`), bounded retry/backoff on network/5xx only |
+| 12.3 | Polling + retries | Opt-in background polling (`pollingIntervalMs`, default 0, unref'ed timers, `close()`), `cacheTtlMs` freshness, bounded retry/backoff on network/5xx only |
 | 12.4 | Provider integration | Bulk enabled by default in `SwitchboardProvider`; `onClose()` clears timers |
 
 Direct SDK users keep the single-flag path unless they opt in; the provider
