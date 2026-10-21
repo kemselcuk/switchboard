@@ -12,3 +12,6 @@ docs/architecture/
 
 # Workspace build output
 packages/*/dist/
+
+# Local package tarballs
+*.tgz

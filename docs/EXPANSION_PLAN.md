@@ -302,3 +302,16 @@ Task 086 (`docs/tasks/086-flag-deletion.md`) adds project-scoped flag deletion.
 Landed on `main` in `6443faf`; see the task status for test evidence. Out of
 scope: restore/audit, UI delete control, legacy DELETE, and project/environment
 deletion.
+
+## 16. v2.1 distribution track (approved)
+
+Task 087 (`docs/tasks/087-package-install.md`) verifies that the SDK and
+provider install outside the monorepo.
+
+| ID | Item | Acceptance |
+|---|---|---|
+| 16.1 | Tarball verification | `npm run test:packages` builds, packs, installs both tarballs into a temp consumer, and evaluates via SDK + provider |
+| 16.2 | Package metadata | `license`, `repository.directory`, `engines`, `files`; LICENSE in both tarballs; still `private: true` |
+| 16.3 | Publish checklist | README documents the release steps and credentials requirement; actual publish remains out of scope |
+
+No registry automation, provenance, signing, or GitHub Packages in this track.
