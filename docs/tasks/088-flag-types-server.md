@@ -82,10 +82,9 @@ review afterwards.
 
 ## Status
 
-Landed on `main` in `46a04f5` (`feat: add flag value types`). Suite counts for
-the server change (recorded on the Task 089 branch, which only touches the
-client packages and the assertions inside the existing official-provider
-contract test):
+Landed on `main` in `793f4cc` (`feat: add flag value types`). Suite counts for
+the server change (the Task 089 branch only touched client packages and the
+existing official-provider contract test):
 
 ```text
 npm test
