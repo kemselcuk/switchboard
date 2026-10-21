@@ -580,3 +580,73 @@ are unchanged.
   cannot poison later evaluations.
 - Targeting rules, variant weights, per-type UI controls, and type migration
   remain out of scope.
+
+## ADR-030 — Targeting segments and first-match flag rules
+
+**Context:** Boolean and typed flags had only a deterministic percentage
+rollout. Teams need to serve on/off values based on evaluation-context
+attributes without introducing a rule language, a full experiment engine, or a
+second authorization mechanism. The existing rollout must remain the fallback.
+
+**Decision:** Add project-scoped segments and per-flag/environment rules.
+
+Segments have an immutable `key` unique within a project, a `name`, and an
+ordered list of at most 20 conditions. A condition is
+`{ attribute, operator: "eq", value }` where `attribute` is 1..64 characters and
+`value` is a string of at most 256 characters, a finite number, or a boolean.
+Objects, arrays, and `null` are rejected. All conditions are ANDed; an empty
+list is a vacuous AND and therefore matches every context. There are no other
+operators.
+
+Every flag/environment pair has an ordered first-match list of at most 50
+rules. A rule contains exactly one of `segmentKey` or inline `conditions`, plus
+`action: "on" | "off"`. Segment references must resolve in the same project.
+The list is replaced as a whole by the admin API; the empty list clears it.
+
+Evaluation precedence is:
+
+1. disabled → `offValue`, reason `DISABLED`, variant `disabled`;
+2. first matching rule → `onValue`/`offValue`, reason `TARGETING_MATCH`,
+   variant `on`/`off` for every flag type;
+3. no match → the existing deterministic `SPLIT` rollout.
+
+Conditions use strict typed equality: `"1"` never matches `1`, and `"true"`
+never matches `true`. A missing attribute does not match. `targetingKey` is
+evaluated as a normal string attribute and is not injected with a default; the
+anonymous default remains only for rollout bucketing. `bucket` is `null` for
+disabled and targeting results.
+
+Segments are stored in a project-scoped `segments` table with JSON text
+conditions. Rules are stored in `flag_rules` with a nullable `segment_id` or
+JSON text `conditions`, exactly one of which is enforced by a check constraint.
+Uniqueness covers `(project_id, key)` for segments and
+`(flag_id, environment_id, position)` for rules. Flags and environments cascade
+to rules; segments use a restrictive reference and the API returns
+`409 SEGMENT_IN_USE` while any rule references them. Deleting a flag removes
+all of its rules in every environment.
+
+The bulk OFREP ETag includes each flag's ordered rule list and the project's
+segments, so rule edits, rule clears, segment edits, creation, and deletion
+change the validator. Single-flag evaluation applies the same rules but has no
+ETag.
+
+Export/import keeps format `switchboard-v2-export` version `1`: projects gain
+an optional `segments` array and flags gain an optional ordered `rules` array.
+A missing array means "none", so pre-targeting exports remain valid. Import is
+still additive; rules are replaced only when a flag carries the `rules` field,
+and unknown segment references reject the whole transaction with
+`INVALID_EXPORT`.
+
+The legacy `/api/flags` and `/api/evaluate` paths stay boolean-only and ignore
+rules entirely.
+
+**Consequences:**
+- Targeting is explicit and small: `eq` only, no `in`/`gt`/regex, OR/NOT,
+  percentage inside a rule, variants/weights, segment nesting, or experiments.
+- An empty condition list intentionally means "everyone"; the 50-rule cap and
+  ordered first-match list bound the evaluation cost.
+- Segment keys are immutable; rename means create a new segment and move rules.
+- Rules are per environment, so production and staging can target differently.
+- ETag invalidation is conservative: editing any segment in the project
+  invalidates bulk evaluation caches even if no rule references it.
+- Targeting decisions are not audit events, analytics, or authorization.

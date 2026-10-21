@@ -756,6 +756,81 @@ npm run test:contract
 ℹ todo 0
 ```
 
+## v2.1 targeting rules (Task 090)
+
+Task 090 added project segments and ordered per-flag/environment rules.
+Evaluation is disabled → first matching rule (`TARGETING_MATCH`, variant
+`on`/`off`) → deterministic `SPLIT` rollout. Conditions are ANDed `eq`
+comparisons with strict typed equality; each segment holds 0..20 conditions and
+each flag/environment holds 0..50 rules. Bulk ETags include rules and segments,
+segment deletion is blocked while referenced, flag deletion cascades rules, and
+version-1 exports include both. The legacy `/api/flags` and `/api/evaluate`
+paths remain boolean-only and ignore rules.
+
+Commands were run from the repository root on 2026-10-21.
+
+```text
+npm test
+ℹ tests 181
+ℹ suites 0
+ℹ pass 174
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 7
+ℹ todo 0
+```
+
+The 7 skipped tests are the Postgres integration tests. The new SQLite suite is
+`test/v2/targeting.test.js` (21 tests), including segment/rule validation,
+first-match order, strict equality, missing attributes, `targetingKey`,
+disabled precedence, typed on/off values, ETag changes, export/import, project
+isolation, and the legacy non-interference check.
+
+```text
+npm run test:contract
+✔ TARGETING_MATCH OFREP responses match the official schema
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+```
+
+```text
+npm run test:workspaces
+@switchboard/openfeature-provider
+# tests 8
+# pass 8
+# fail 0
+@switchboard/sdk
+# tests 34
+# pass 34
+# fail 0
+```
+
+```text
+DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run test:db
+✔ Postgres stores and evaluates targeting segments and rules
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+```
+
+End-to-end SQLite check with a `beta-users` segment and
+`[{segmentKey:"beta-users",action:"on"}]` at rollout 0:
+
+```text
+{"context":{"targetingKey":"user-7","plan":"beta"},"status":200,"key":"new-checkout","value":true,"reason":"TARGETING_MATCH","variant":"on"}
+{"context":{"targetingKey":"user-7","plan":"free"},"status":200,"key":"new-checkout","value":false,"reason":"SPLIT","variant":"disabled"}
+bulk 200 "d703dd8ed5fc5c21" {"flags":[{"key":"new-checkout","value":true,"reason":"TARGETING_MATCH","variant":"on"}],"metadata":{"version":"\"d703dd8ed5fc5c21\""}}
+```
+
 ## Historical v1 evidence
 
 ## 1. Automated tests

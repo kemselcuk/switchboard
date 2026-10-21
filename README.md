@@ -33,9 +33,10 @@ project isolation, 20%→40% monotonicity, two services, and the legacy API.
 - Verified tarball install for the SDK and OpenFeature provider.
 - Dependency-free Prometheus `/metrics` endpoint.
 - Typed flags (`boolean`, `string`, `number`, `json`) with on/off values.
+- Project segments and ordered first-match targeting rules per flag/environment.
 
-Targeting rules/segments, a full admin dashboard, audit/RBAC, browser SDK, and
-streaming are planned for later versions.
+A full admin dashboard, audit/RBAC, browser SDK, and streaming are planned for
+later versions.
 
 ## Quick start
 
@@ -204,6 +205,9 @@ Management endpoints require `Authorization: Bearer <ADMIN_TOKEN>`.
 | `POST/GET` | `/api/v1/projects/:project/environments/:env/flags` | Create/list flags |
 | `GET/PATCH` | `/api/v1/projects/:project/environments/:env/flags/:key` | Get/update a flag |
 | `DELETE` | `/api/v1/projects/:project/flags/:key` | Delete a flag and all environment configs |
+| `POST/GET` | `/api/v1/projects/:project/segments` | Create/list segments |
+| `GET/PUT/DELETE` | `/api/v1/projects/:project/segments/:key` | Get/replace/delete a segment |
+| `GET/PUT` | `/api/v1/projects/:project/environments/:env/flags/:key/rules` | Read/replace ordered flag rules |
 | `POST/GET` | `/api/v1/projects/:project/environments/:env/api-keys` | Create/list API keys |
 | `DELETE` | `/api/v1/projects/:project/environments/:env/api-keys/:id` | Revoke an API key |
 
@@ -261,6 +265,38 @@ flags reject on/off values and keep their existing behavior. The legacy
 `/api/flags` API stays boolean-only and ignores non-boolean flags. Request
 bodies are capped at 32 KiB, enough for two maximum-size JSON values; the bulk
 SDK cache clones object values on read so callers cannot mutate cached state.
+
+### Targeting rules and segments
+
+A segment is project-scoped and groups an ordered list of at most 20 ANDed
+conditions. A condition has an `attribute`, the operator `eq`, and a primitive
+`value` (string up to 256 characters, finite number, or boolean). Condition
+lists may be empty, which matches every context.
+
+```bash
+curl -sS -X POST "$BASE/api/v1/projects/checkout/segments" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"key":"beta-users","name":"Beta users","conditions":[{"attribute":"plan","operator":"eq","value":"beta"}]}'
+
+curl -sS -X PUT "$BASE/api/v1/projects/checkout/environments/production/flags/new-checkout/rules" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"rules":[{"segmentKey":"beta-users","action":"on"},{"conditions":[{"attribute":"region","operator":"eq","value":"EU"}],"action":"off"}]}'
+```
+
+Each flag/environment pair has an ordered first-match list of at most 50 rules.
+A rule is exactly one of `{"segmentKey":"..."}` or `{"conditions":[...]}`, plus
+`"action":"on"|"off"`; `PUT` replaces the whole list and `{"rules":[]}` clears
+it. Segment references must belong to the same project. Deleting a referenced
+segment returns `409 SEGMENT_IN_USE`; deleting a flag removes its rules.
+
+Evaluation order is disabled → first matching rule (`TARGETING_MATCH`, variant
+`on`/`off`) → deterministic percentage rollout (`SPLIT`). Equality is strictly
+typed (`"1"` does not match `1`), a missing attribute does not match, and
+`targetingKey` is available as a normal string attribute. The legacy
+`/api/flags` and `/api/evaluate` APIs ignore rules. Bulk OFREP ETags change when
+rules or segments change.
 
 ### OFREP evaluation
 
@@ -374,9 +410,9 @@ are never reused (`flag_legacy_sequences`).
 
 ## Configuration export/import
 
-Project, environment, flag, and rollout definitions can be exported as
-versioned JSON for backups, CI seeding, or copying staging to production. API
-keys are never exported.
+Project, environment, flag, rollout, segment, and rule definitions can be
+exported as versioned JSON for backups, CI seeding, or copying staging to
+production. API keys are never exported.
 
 ```bash
 # SQLite (uses V2_DB_PATH; defaults to ./data/switchboard-v2.db)
@@ -394,7 +430,10 @@ JSON) or call `node scripts/export-config.mjs` directly.
 
 Import is additive and idempotent: it creates missing projects, environments,
 and flags, updates flag descriptions and configs, and never deletes or renames
-anything. API keys must be recreated on the target instance. `--dry-run`
+anything. Segments are upserted by project key; rules are replaced when a flag
+carries a `rules` array. A missing `segments` or `rules` field means "none", so
+pre-targeting exports remain valid. Unknown segment references abort the whole
+import. API keys must be recreated on the target instance. `--dry-run`
 validates and reports counts without persisting configuration rows; on a fresh
 path the database file/schema and default project may still be bootstrapped.
 The format is
@@ -500,8 +539,8 @@ src/
   flags/                 # v1 legacy routes/repository/evaluator
   v2/
     db.js                # Kysely Postgres/SQLite + migrations
-    evaluator.js         # v2 100k bucket evaluator
-    repositories/        # projects, flags, API keys
+    evaluator.js         # v2 targeting + 100k bucket evaluator
+    repositories/        # projects, flags, segments, rules, API keys
     routes/              # management + OFREP
     legacy-repository.js # v1 API over the v2 schema
 db/migrations/           # Kysely migrations
@@ -528,8 +567,9 @@ examples/
 - `ADMIN_TOKEN` is still the bootstrap admin credential; project-scoped admin
   keys and RBAC/SSO are later work.
 - Typed flags support `boolean`, `string`, `number`, and plain-object `json`
-  values only; targeting rules, segments, variant weights, and changing a
-  flag's type after creation are later work.
+  values only. Targeting uses project segments with `eq` conditions; other
+  operators, OR/NOT, variant weights, and changing a flag's type after creation
+  are later work.
 - Server API keys only; browser/client keys and a browser SDK are later work.
 - Single Postgres instance target; server-side flag/config evaluation reads
   are uncached. The only server-side cache is a process-local 5s API-key prefix

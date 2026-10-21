@@ -347,5 +347,21 @@ without a rule language or experiment engine.
 | 18.4 | Consistency | ETag includes rules/segments; segment delete blocked while referenced; flag delete cascades rules |
 | 18.5 | Portability | Export/import and Postgres coverage for segments/rules |
 
+Implemented on `feature/targeting-rules`:
+
+- `27b2dae` — segments/rules storage, validation, admin CRUD and rules API.
+- `5269411` — first-match evaluation, `TARGETING_MATCH`, ETag input.
+- `2facf9c` — segment/rule export and import (format version stays `1`).
+- `76b26c6` — SQLite, OFREP contract and Postgres coverage.
+
+Acceptance mapping: 18.1 project-scoped segments with immutable keys and
+ANDed `eq` conditions (0..20); 18.2 ordered first-match rules per flag and
+environment, exactly one of segment/inline conditions, `on`/`off`, 0..50;
+18.3 disabled → match → `SPLIT`, strict typed equality, missing attributes do
+not match, `targetingKey` is a normal attribute; 18.4 bulk ETag covers ordered
+rules and project segments, `409 SEGMENT_IN_USE`, flag delete cascade; 18.5
+version-1 export/import round-trip and Postgres migration/evaluation tests.
+See `docs/EVIDENCE.md` under "v2.1 targeting rules (Task 090)" and ADR-030.
+
 Out of scope: extra operators (in/gt/regex/OR/NOT), percentage inside rules,
 variants/weights, segment nesting, UI, experiments, and analytics.

@@ -72,3 +72,32 @@ rule hit analytics, and user accounts.
 
 Small commits; `npm test` per change; `test:contract`, `test:workspaces`,
 `test:db`; docs/ADR-030/EVIDENCE. Update this brief's status when done.
+
+## Status
+
+Implemented on `feature/targeting-rules`:
+
+- `27b2dae` — migration `007_targeting_rules.mjs`, segment/rule validation,
+  project-scoped segment CRUD and per-environment rules APIs.
+- `5269411` — first-match evaluation in the v2 evaluator and OFREP routes,
+  `TARGETING_MATCH` results, bulk ETag coverage for rules and segments.
+- `2facf9c` — export/import of segments and rules with format version `1`.
+- `76b26c6` — SQLite, OFREP contract and Postgres tests.
+- Final docs commit — README, ADR-030, expansion plan, evidence, this status.
+
+Behavior notes: condition lists use 0..20 ANDed `eq` conditions (an empty list
+matches every context); rule lists use 0..50 entries and `PUT {"rules":[]}`
+clears them. Rules may use a same-project `segmentKey` or inline `conditions`,
+never both. `DELETE` of a referenced segment returns `409 SEGMENT_IN_USE`;
+deleting a flag cascades its rules. Legacy `/api/flags` and `/api/evaluate`
+remain boolean-only and ignore rules. Import is additive; a missing
+`segments`/`rules` field means none and leaves existing rules untouched.
+
+Final real output is in `docs/EVIDENCE.md` under "v2.1 targeting rules
+(Task 090)":
+
+- `npm test`: 181 tests, 174 pass, 7 Postgres skips.
+- `npm run test:contract`: 13/13.
+- `npm run test:workspaces`: provider 8/8, SDK 34/34.
+- `npm run test:db`: 7/7 on Postgres, including segment/rule storage and
+  evaluation, ETag changes, `SEGMENT_IN_USE`, and cascade after flag deletion.
