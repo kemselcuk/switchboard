@@ -395,11 +395,12 @@ flag set is usually evaluated repeatedly for that context.
 **Decision:** The Node SDK offers opt-in bulk mode (`bulkEvaluation`, default
 `false`). In bulk mode it calls `POST /ofrep/v1/evaluate/flags`, caches the flag
 set per evaluation context (keyed by the full context in stable key order), and
-treats entries as fresh for `cacheTtlMs` (default 10000 ms; `0` disables
-caching). A stale entry is refreshed with `If-None-Match`: `304` refreshes the
-timestamp and keeps the cached flags, `200` replaces the entry. The cache is
-bounded by `maxCachedContexts` (default 1000) with LRU eviction that also clears
-the entry's polling timer. One request is in flight per context. Background
+treats entries as fresh for `cacheTtlMs` (default 10000 ms; `0` forces a
+conditional refresh on every evaluation, and a `304` may still reuse the last
+fetched flag set). A stale entry is refreshed with `If-None-Match`: `304`
+refreshes the timestamp and keeps the cached flags, `200` replaces the entry.
+The cache is bounded by `maxCachedContexts` (default 1000) with LRU eviction that
+also clears the entry's polling timer. One request is in flight per context. Background
 polling is opt-in (`pollingIntervalMs`, default `0`; timers are `unref()`ed),
 and `close()` clears all timers and cache entries. Transport retries are bounded
 (`maxRetries`, default 2, exponential backoff with jitter) and apply only to

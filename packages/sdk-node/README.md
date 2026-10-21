@@ -106,8 +106,9 @@ usually need neither a long TTL nor polling. The cache is process-local, so each
 service instance has its own copy.
 
 Call `close()` on shutdown. It clears every polling timer and cached entry; the
-OpenFeature provider calls it from `onClose()`. A closed client is not disabled:
-later evaluations may repopulate the bounded cache, but polling stays off.
+OpenFeature provider calls it from `onClose()`. Subsequent evaluations on a
+closed client return the supplied default with `NETWORK_ERROR` without making
+requests, and polling stays off.
 
 ### Failures
 

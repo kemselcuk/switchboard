@@ -18,7 +18,7 @@ Extend `SwitchboardClientOptions`:
 | Option | Default | Meaning |
 |---|---|---|
 | `bulkEvaluation` | `false` | Use `POST /ofrep/v1/evaluate/flags` and cache per context |
-| `cacheTtlMs` | `10000` | Freshness window; `0` disables caching (fetch on each call) |
+| `cacheTtlMs` | `10000` | Freshness window; `0` forces a conditional refresh on every evaluation (a `304` may still reuse the last fetched flag set) |
 | `pollingIntervalMs` | `0` | Opt-in background refresh interval; `0` disables polling |
 | `maxCachedContexts` | `1000` | LRU bound on per-context entries (and their timers) |
 | `maxRetries` | `2` | Extra attempts for network errors and 5xx responses (total `maxRetries + 1`); 4xx are not retried |
