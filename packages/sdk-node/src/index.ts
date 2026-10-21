@@ -491,9 +491,13 @@ export class SwitchboardClient {
       };
     }
 
+    const value = expected === 'object'
+      ? structuredClone(flag.value)
+      : flag.value;
+
     return {
       key: flagKey,
-      value: flag.value as T,
+      value: value as T,
       reason: flag.reason,
       variant: flag.variant,
     };

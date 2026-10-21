@@ -74,8 +74,9 @@ Landed on `main` in `52a9422` (`feat: add typed flag support to sdk and
 provider`). Recorded output is in
 `docs/EVIDENCE.md` under "v2.1 flag types (Tasks 088 + 089)":
 
-- SDK tests `33/33`, provider tests `8/8`; both packages build with `tsc`.
+- SDK tests `34/34`, provider tests `8/8`; both packages build with `tsc`.
 - `npm run test:workspaces` green.
-- Root `npm test`: 156 tests, 151 pass, 5 Postgres skips.
+- Root `npm test`: 158 tests, 152 pass, 6 Postgres skips.
 - `npm run test:contract`: 12/12, including the extended official-provider
   string and number evaluation.
+- `npm run test:db`: 6/6, including typed string/JSON evaluation.

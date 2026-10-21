@@ -605,3 +605,28 @@ test('legacy API ignores non-boolean flags', async (t) => {
   assert.equal(evaluation.json().enabled, false);
   assert.equal(evaluation.json().reason, 'FLAG_NOT_FOUND');
 });
+
+
+test('accepts two maximum-size JSON values within the request body limit', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+
+  const value = { data: 'x'.repeat(8180) };
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects/demo/environments/production/flags',
+    headers: AUTHORIZATION,
+    payload: {
+      key: 'large-json',
+      type: 'json',
+      enabled: true,
+      rolloutPercentage: 50,
+      onValue: value,
+      offValue: value,
+    },
+  });
+
+  assert.equal(response.statusCode, 201, response.body);
+  assert.equal(response.json().onValue.data.length, 8180);
+});

@@ -74,7 +74,7 @@ export function buildApp({
 } = {}) {
   const app = Fastify({
     logger: buildLoggerOptions(logger),
-    bodyLimit: 16 * 1024,
+    bodyLimit: 32 * 1024,
     ajv: {
       customOptions: {
         coerceTypes: false,

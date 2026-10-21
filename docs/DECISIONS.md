@@ -575,5 +575,8 @@ are unchanged.
   non-boolean flags.
 - The JSON type is a plain object, not an arbitrary JSON document; arrays must
   be wrapped in an object.
+- Request bodies are capped at 32 KiB, enough for two maximum-size JSON values;
+  the SDK clones object values when reading the bulk cache so caller mutation
+  cannot poison later evaluations.
 - Targeting rules, variant weights, per-type UI controls, and type migration
   remain out of scope.

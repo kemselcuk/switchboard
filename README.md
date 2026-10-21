@@ -258,7 +258,9 @@ type returns `409 FLAG_TYPE_MISMATCH`. Limits: strings are at most 4096
 characters, numbers must be finite, and `json` values must be plain objects
 that serialize to at most 8192 bytes (arrays and `null` are rejected). Boolean
 flags reject on/off values and keep their existing behavior. The legacy
-`/api/flags` API stays boolean-only and ignores non-boolean flags.
+`/api/flags` API stays boolean-only and ignores non-boolean flags. Request
+bodies are capped at 32 KiB, enough for two maximum-size JSON values; the bulk
+SDK cache clones object values on read so callers cannot mutate cached state.
 
 ### OFREP evaluation
 
@@ -482,7 +484,7 @@ that database and does not clean them up (flag deletion exists, project
 deletion does not); point it at a dedicated benchmark database. Numbers are
 from one run and are directional, not a capacity guarantee.
 
-Current local suite: 156 tests, 151 pass, 5 skipped when `DATABASE_URL` is not
+Current local suite: 158 tests, 152 pass, 6 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)

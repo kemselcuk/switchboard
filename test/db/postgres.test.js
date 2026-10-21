@@ -431,3 +431,83 @@ test('Postgres flag deletion removes every environment config', { skip }, async 
 
   assert.equal(flagRow.legacy_id, 2);
 });
+
+
+test('Postgres evaluates string and JSON flags', { skip }, async (t) => {
+  const v2 = await initializeV2Database({ databaseUrl: DATABASE_URL });
+  const app = buildApp({ v2, adminToken: 'postgres-test-token' });
+  const auth = { authorization: 'Bearer postgres-test-token' };
+  const suffix = randomUUID().slice(0, 8);
+  const projectKey = `pgtypes-${suffix}`;
+
+  t.after(() => app.close());
+
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects',
+    headers: auth,
+    payload: { key: projectKey, name: 'Typed flags' },
+  });
+  await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${projectKey}/environments`,
+    headers: auth,
+    payload: { key: 'production', name: 'Production' },
+  });
+
+  for (const payload of [
+    {
+      key: 'theme',
+      type: 'string',
+      enabled: true,
+      rolloutPercentage: 100,
+      onValue: 'dark',
+      offValue: 'light',
+    },
+    {
+      key: 'config',
+      type: 'json',
+      enabled: true,
+      rolloutPercentage: 0,
+      onValue: { nested: 1 },
+      offValue: { nested: 2 },
+    },
+  ]) {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectKey}/environments/production/flags`,
+      headers: auth,
+      payload,
+    });
+
+    assert.equal(response.statusCode, 201, response.body);
+  }
+
+  const key = await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${projectKey}/environments/production/api-keys`,
+    headers: auth,
+    payload: { name: 'typed' },
+  });
+
+  const context = { targetingKey: 'user-1' };
+  const theme = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/theme',
+    headers: { 'x-api-key': key.json().key },
+    payload: { context },
+  });
+  const config = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/config',
+    headers: { 'x-api-key': key.json().key },
+    payload: { context },
+  });
+
+  assert.equal(theme.statusCode, 200);
+  assert.equal(theme.json().value, 'dark');
+  assert.equal(theme.json().variant, 'on');
+  assert.equal(config.statusCode, 200);
+  assert.deepEqual(config.json().value, { nested: 2 });
+  assert.equal(config.json().variant, 'off');
+});

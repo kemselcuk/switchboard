@@ -99,5 +99,7 @@ npm run test:contract
 ℹ fail 0
 ```
 
-The 5 skipped tests are the Postgres integration tests (`DATABASE_URL` unset).
+The 5 skipped tests are the Postgres integration tests (`DATABASE_URL` unset);
+the Postgres run now includes typed string/JSON evaluation (6/6 with the tag
+deletion test).
 Task 089 then added typed SDK/provider coverage; see the Task 089 status.

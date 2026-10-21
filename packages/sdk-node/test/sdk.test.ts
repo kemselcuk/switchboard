@@ -791,6 +791,40 @@ test('bulk mode reports TYPE_MISMATCH and accepts array objects', async (t) => {
   assert.equal(list.reason, 'SPLIT');
 });
 
+test('bulk object values are cloned so callers cannot poison the cache', async (t) => {
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(bulkResponse([
+        {
+          key: 'config',
+          value: { nested: { count: 1 }, labels: ['a'] },
+          reason: 'SPLIT',
+        },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 60000,
+  });
+  t.after(() => client.close());
+
+  const context = { targetingKey: 'user-1' };
+  const first = await client.getObjectDetails('config', {}, context);
+  first.value.nested.count = 99;
+  first.value.labels.push('mutated');
+
+  const second = await client.getObjectDetails('config', {}, context);
+
+  assert.deepEqual(second.value, { nested: { count: 1 }, labels: ['a'] });
+});
+
 test('retries 5xx responses up to maxRetries', async (t) => {
   let requestCount = 0;
   const server = await startServer((request, response) => {

@@ -627,7 +627,8 @@ Task 088 added `boolean`/`string`/`number`/`json` flag types with
 read-time type checking in both the single-flag and bulk paths, and
 string/number/object resolution in the OpenFeature provider. The official OFREP
 provider contract test also evaluates string and number flags against a live
-local service.
+local service. Bulk object values are cloned per read; requests may carry two
+maximum-size JSON values within the 32 KiB body cap.
 
 Commands were run from the repository root on 2026-10-21 after `npm ci`.
 
@@ -651,10 +652,10 @@ ok 14 - types bulk-cached values at read time
 # Subtest: bulk mode reports TYPE_MISMATCH and accepts array objects
 ok 15 - bulk mode reports TYPE_MISMATCH and accepts array objects
 ...
-1..33
-# tests 33
+1..34
+# tests 34
 # suites 0
-# pass 33
+# pass 34
 # fail 0
 # cancelled 0
 # skipped 0
@@ -707,17 +708,30 @@ npm run test:workspaces
 
 ```text
 npm test
-ℹ tests 156
+ℹ tests 158
 ℹ suites 0
-ℹ pass 151
+ℹ pass 152
 ℹ fail 0
 ℹ cancelled 0
-ℹ skipped 5
+ℹ skipped 6
 ℹ todo 0
 ```
 
-The 5 skipped tests are the Postgres integration tests, which run when
-`DATABASE_URL` is set.
+The 6 skipped tests are the Postgres integration tests, which run when
+`DATABASE_URL` is set:
+
+```text
+DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run test:db
+✔ maps a Postgres storage failure to 503
+✔ Postgres migrations and v2 evaluation flow
+✔ Postgres covers migration, legacy routes, isolation and revocation
+✔ Postgres exports and re-imports configuration
+✔ Postgres flag deletion removes every environment config
+✔ Postgres evaluates string and JSON flags
+ℹ tests 6
+ℹ pass 6
+ℹ fail 0
+```
 
 ```text
 npm run test:contract

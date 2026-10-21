@@ -18,7 +18,7 @@ OpenFeature provider.
 | SDK | Node/TypeScript SDK + OpenFeature provider |
 | API compatibility | `/api` stays; new `/api/v1` and `/ofrep/v1` |
 | First release | `v2.0.0`: boolean flags + percentage rollout |
-| Later | Targeting rules/segments, flag types, dashboard, audit/RBAC |
+| Later | Targeting rules/segments, dashboard, audit/RBAC |
 | Cost | €0 additional infrastructure; existing Go subscription |
 
 ## 2. Domain model
@@ -330,7 +330,6 @@ beyond boolean while keeping deterministic percentage rollout.
 | 17.4 | Legacy + transfer | Legacy stays boolean-only; export/import round-trips all types |
 | 17.5 | SDK/provider | Typed getters and OpenFeature resolution for string/number/object |
 
-Landed on `main` in `46a04f5` (server core) and `feat: add typed flag support to
-sdk and provider` (SDK/provider); see the task statuses and `docs/EVIDENCE.md`
-for test evidence. Out of scope: targeting rules, variants/weights, UI controls,
+Landed on `main` in `793f4cc` (server core) and `52a9422` (SDK/provider); see
+the task statuses and `docs/EVIDENCE.md` for test evidence. Out of scope: targeting rules, variants/weights, UI controls,
 flag type changes, and non-boolean legacy API support.

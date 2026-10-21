@@ -43,7 +43,8 @@ Bulk behavior:
   runs for the bounded LRU set.
 - A missing flag in a successful bulk response returns the default with
   `reason: 'ERROR'` and `errorCode: 'FLAG_NOT_FOUND'`.
-- A non-boolean flag value returns `TYPE_MISMATCH`.
+- A value requested through the wrong typed getter returns `TYPE_MISMATCH`.
+  (v2.1 adds string/number/object getters; see Task 089.)
 - On final failure (after retries) the client returns the default with the
   existing error codes; it does not serve stale values. Background polling
   failures leave the previous cache untouched.
