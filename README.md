@@ -46,9 +46,18 @@ The stack starts Postgres, runs migrations, and serves:
 
 - Legacy demo UI: http://localhost:3000
 - v2 projects/OFREP demo: http://localhost:3000/v2.html
-- Health: http://localhost:3000/healthz
+- Health (liveness): http://localhost:3000/healthz
+- Readiness (storage ping): http://localhost:3000/readyz
 - Management API: http://localhost:3000/api/v1
 - OFREP: http://localhost:3000/ofrep/v1
+
+`/healthz` is a cheap liveness probe and does not touch storage. `/readyz`
+pings storage and returns `503` with the shared
+`{ "error": { "code": "EVALUATION_UNAVAILABLE", "message": ... } }` envelope
+when storage is unavailable.
+
+On Postgres, `DATABASE_POOL_MAX` (integer ≥ 1) sets the `pg` pool size. Unset
+or invalid values keep the `pg` default of 10.
 
 `docker compose down` keeps the Postgres volume. `docker compose down -v`
 removes it. Both ports bind to `127.0.0.1` by default; override `BIND_ADDRESS`
@@ -281,6 +290,18 @@ npm run test:db       # Postgres integration (requires DATABASE_URL)
 npm run test:contract # OFREP contract + official @openfeature/ofrep-provider test
 npm run test:workspaces # SDK/provider build + tests
 npm run smoke         # Docker Compose + Postgres smoke test
+npm run bench         # OFREP load benchmark (see below)
+```
+
+`npm run bench` is a dependency-free load driver. It starts a local server on a
+free port with a temporary SQLite database, creates a throwaway benchmark
+project/flag/API key, and reports requests/sec plus average, p50, and p99
+latency for single-flag and bulk OFREP evaluation. Defaults are 10 connections
+and 10s per scenario; override them with `BENCH_CONNECTIONS` and
+`BENCH_DURATION`. To run against Postgres instead, set `DATABASE_URL`:
+
+```bash
+DATABASE_URL=postgres://... npm run bench
 ```
 
 Current local suite: 106 tests, 103 pass, 3 skipped when `DATABASE_URL` is not
