@@ -421,3 +421,26 @@ false` wins) and leaves polling off.
   (ADR-003).
 - Per-flag mode remains the default for direct SDK users, so existing behavior
   is unchanged unless bulk is requested.
+
+## ADR-025 — Versioned JSON configuration transfer
+
+**Context:** Self-hosted users need to back up flag definitions, seed CI/test
+instances, and copy a project between environments without hand-editing SQL.
+Copying API keys would move secrets between instances and is not acceptable.
+
+**Decision:** Provide a dependency-free JSON export/import format
+(`switchboard-v2-export`, version `1`) implemented in
+`src/v2/repositories/transfer.js` and exposed through
+`npm run export:config` / `npm run import:config`. Keys are the identity; UUIDs
+and legacy IDs are not exported. Import is additive and idempotent inside one
+transaction: it creates missing projects/environments/flags, updates flag
+descriptions and configs, and never deletes or renames. A `--dry-run` performs
+validation and counts without persisting. No API-key, hash, prefix, or secret
+field is exported or imported. This is a CLI, not an HTTP endpoint.
+
+**Consequences:**
+- Backups and CI seeds are portable between SQLite and Postgres instances.
+- API keys must be created separately on the target instance.
+- Imports do not remove definitions that are absent from the file.
+- The format is versioned; incompatible versions are rejected before any write.
+- The CLI reads `DATABASE_URL` or `V2_DB_PATH`, matching the server.

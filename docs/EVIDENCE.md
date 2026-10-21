@@ -433,6 +433,52 @@ npm run test:workspaces
 # duration_ms 2917.937875
 ```
 
+### v2.1 configuration transfer
+
+Task 084 adds `npm run export:config` and `npm run import:config` (Task 084).
+The core tests cover export shape/no secrets, round-trip, idempotency, changed
+configs, dry run, validation without partial writes, API-key preservation, and
+per-project legacy IDs; a separate test drives both CLI scripts against a
+temporary SQLite database.
+
+```text
+node --test test/v2/transfer.test.js
+✔ exports projects, environments, flags and configs without secrets
+✔ round-trips into a fresh database with new IDs and matching values
+✔ is idempotent on a second import
+✔ applies changed configs from a new export
+✔ dry run reports changes without writing anything
+✔ rejects invalid exports without partial writes
+✔ never touches existing API keys
+✔ assigns per-project numeric legacy ids to imported flags
+ℹ tests 8
+ℹ pass 8
+ℹ fail 0
+```
+
+```text
+node --test test/v2/transfer-cli.test.js
+✔ export/import CLI round-trips a SQLite database
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0
+```
+
+Full suite after the change:
+
+```text
+npm test
+ℹ tests 131
+ℹ suites 0
+ℹ pass 128
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+```
+
+The 3 skips are the Postgres-only tests (`DATABASE_URL` unset).
+
 ## Historical v1 evidence
 
 ## 1. Automated tests

@@ -267,7 +267,8 @@ configuration transfer for backups and CI seeding.
 | 13.3 | CLI + dry run | `export:config` / `import:config` use `DATABASE_URL` or `V2_DB_PATH`; dry run writes nothing |
 | 13.4 | Validation | Reject unknown format/version, non-boolean types, invalid keys/rollout without partial writes |
 
-No HTTP endpoints, deletion, or secret export in this track.
+Landed on `main` in `eb3e9d0`; see the task status for test evidence. No HTTP
+endpoints, deletion, or secret export in this track.
 
 Items 12.1–12.4 landed on `main` on 2026-10-21 (`9ab77b8`, `c367a82`,
 `1b4d26d`); test evidence and the remaining out-of-scope list are recorded in

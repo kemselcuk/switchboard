@@ -100,3 +100,16 @@ than boolean, HTTP endpoints, scheduled backups, and cross-version migration.
 
 Core module + tests first; CLI after the core lands; docs and an independent
 review round at the end.
+
+## Status (2026-10-21)
+
+Landed on `main`:
+
+- `eb3e9d0` — core export/import repository, CLI scripts, and tests.
+
+Tests: `test/v2/transfer.test.js` 8/8, `test/v2/transfer-cli.test.js` 1/1;
+full suite 131 tests (128 pass, 3 Postgres skips). Real output is recorded in
+`docs/EVIDENCE.md` under "v2.1 configuration transfer".
+
+Still out of scope: API-key/secret export, deletion, renaming keys, HTTP
+endpoints, scheduled backups, and non-boolean flag types.

@@ -28,6 +28,7 @@ project isolation, 20%→40% monotonicity, two services, and the legacy API.
 - Postgres primary; SQLite remains for local/test and legacy mode.
 - Legacy `/api/flags` and `/api/evaluate` continue to work.
 - SQLite → Postgres migration for existing flags.
+- Versioned JSON configuration export/import (API keys excluded).
 
 Targeting rules/segments, string/number/JSON flag types, a full admin dashboard,
 audit/RBAC, browser SDK, and streaming are planned for later versions.
@@ -294,6 +295,29 @@ npm run migrate:legacy
 The script copies flags into the default project/environment, preserves
 settings and timestamps, and is idempotent. See
 [`docs/MIGRATION.md`](docs/MIGRATION.md) for the full procedure.
+
+## Configuration export/import
+
+Project, environment, flag, and rollout definitions can be exported as
+versioned JSON for backups, CI seeding, or copying staging to production. API
+keys are never exported.
+
+```bash
+# SQLite (uses V2_DB_PATH; defaults to ./data/switchboard-v2.db)
+V2_DB_PATH=./data/switchboard-v2.db npm run export:config -- --file backup.json
+V2_DB_PATH=./data/switchboard-v2.db npm run import:config -- --file backup.json --dry-run
+V2_DB_PATH=./data/switchboard-v2.db npm run import:config -- --file backup.json
+
+# Postgres
+DATABASE_URL=postgres://... npm run export:config -- --file backup.json
+```
+
+Import is additive and idempotent: it creates missing projects, environments,
+and flags, updates flag descriptions and configs, and never deletes or renames
+anything. API keys must be recreated on the target instance. `--dry-run`
+validates and reports counts without writing. The format is
+`switchboard-v2-export` version `1`; flags are listed per environment only when
+a config exists there.
 
 ## Tests
 
