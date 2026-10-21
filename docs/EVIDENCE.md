@@ -139,6 +139,8 @@ Legacy migration complete: 1 migrated, 0 skipped, 1 total.
 
 ### Docker Compose smoke
 
+Excerpt (health/readiness and build/teardown output omitted):
+
 ```text
 npm run smoke
 health: {"status":"ok"}

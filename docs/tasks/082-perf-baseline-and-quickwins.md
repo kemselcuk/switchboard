@@ -21,7 +21,7 @@ self-hosted service. Read `AGENTS.md`, `docs/EXPANSION_PLAN.md`, and
    `docs/EVIDENCE.md` before any optimization lands.
 2. **P5 readiness**: `/readyz` performs a storage ping and returns 503 when
    storage is unavailable; `/healthz` stays a cheap liveness probe.
-3. **P6 pool sizing**: `DATABASE_POOL_MAX` (integer, ≥1) configures the
+3. **P6 pool sizing**: `DATABASE_POOL_MAX` (integer `1..1000`) configures the
    Postgres pool; default stays the `pg` default.
 4. **P2 API-key cache**: in-memory prefix cache with a short TTL plus local
    invalidation on create/revoke. Flag/config evaluation reads stay uncached
