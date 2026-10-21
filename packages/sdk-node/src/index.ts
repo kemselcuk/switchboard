@@ -27,7 +27,9 @@ export type SwitchboardClientOptions = {
   timeoutMs?: number;
   fetch?: typeof fetch;
   bulkEvaluation?: boolean;
+  cacheTtlMs?: number;
   pollingIntervalMs?: number;
+  maxCachedContexts?: number;
   maxRetries?: number;
   retryBaseDelayMs?: number;
 };
@@ -76,7 +78,9 @@ type TransportResult =
   | { kind: 'timeout' }
   | { kind: 'network' };
 
-const DEFAULT_POLLING_INTERVAL_MS = 30000;
+const DEFAULT_CACHE_TTL_MS = 10000;
+const DEFAULT_POLLING_INTERVAL_MS = 0;
+const DEFAULT_MAX_CACHED_CONTEXTS = 1000;
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_RETRY_BASE_DELAY_MS = 100;
 
@@ -134,7 +138,9 @@ export class SwitchboardClient {
   private readonly timeoutMs: number;
   private readonly fetchFn: typeof fetch;
   private readonly bulkEvaluation: boolean;
+  private readonly cacheTtlMs: number;
   private readonly pollingIntervalMs: number;
+  private readonly maxCachedContexts: number;
   private readonly maxRetries: number;
   private readonly retryBaseDelayMs: number;
   private readonly bulkCache = new Map<string, BulkCacheEntry>();
@@ -153,9 +159,17 @@ export class SwitchboardClient {
     this.timeoutMs = options.timeoutMs ?? 1000;
     this.fetchFn = options.fetch ?? fetch;
     this.bulkEvaluation = options.bulkEvaluation ?? false;
+    this.cacheTtlMs = Math.max(
+      0,
+      options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS,
+    );
     this.pollingIntervalMs = Math.max(
       0,
       options.pollingIntervalMs ?? DEFAULT_POLLING_INTERVAL_MS,
+    );
+    this.maxCachedContexts = Math.max(
+      1,
+      Math.floor(options.maxCachedContexts ?? DEFAULT_MAX_CACHED_CONTEXTS),
     );
     this.maxRetries = Math.max(
       0,
@@ -296,6 +310,11 @@ export class SwitchboardClient {
     if (!entry) {
       entry = { context: normalized, refreshedAt: 0 };
       this.bulkCache.set(cacheKey, entry);
+      this.evictExcessCacheEntries();
+    } else {
+      // Refresh insertion order so the map remains a least-recently-used list.
+      this.bulkCache.delete(cacheKey);
+      this.bulkCache.set(cacheKey, entry);
     }
 
     if (this.isCacheFresh(entry)) {
@@ -317,16 +336,30 @@ export class SwitchboardClient {
     return this.bulkDetails(entry, flagKey, defaultValue);
   }
 
+  private evictExcessCacheEntries(): void {
+    while (this.bulkCache.size > this.maxCachedContexts) {
+      const oldestKey = this.bulkCache.keys().next().value;
+
+      if (typeof oldestKey !== 'string') {
+        return;
+      }
+
+      const oldest = this.bulkCache.get(oldestKey);
+      this.bulkCache.delete(oldestKey);
+
+      if (oldest?.timer) {
+        clearTimeout(oldest.timer);
+        oldest.timer = undefined;
+      }
+    }
+  }
+
   private isCacheFresh(entry: BulkCacheEntry): boolean {
-    if (!entry.flags) {
+    if (!entry.flags || this.cacheTtlMs === 0) {
       return false;
     }
 
-    if (this.pollingIntervalMs === 0) {
-      return true;
-    }
-
-    return Date.now() - entry.refreshedAt < this.pollingIntervalMs;
+    return Date.now() - entry.refreshedAt < this.cacheTtlMs;
   }
 
   private bulkDetails(
@@ -515,6 +548,15 @@ export class SwitchboardClient {
 
   private schedulePoll(cacheKey: string, entry: BulkCacheEntry): void {
     if (this.closed || this.pollingIntervalMs <= 0) {
+      return;
+    }
+
+    if (this.bulkCache.get(cacheKey) !== entry) {
+      if (entry.timer) {
+        clearTimeout(entry.timer);
+        entry.timer = undefined;
+      }
+
       return;
     }
 

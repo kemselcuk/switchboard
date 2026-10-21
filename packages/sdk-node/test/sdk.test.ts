@@ -210,7 +210,7 @@ test('bulk mode evaluates two flags for one context with one request', async (t)
     baseUrl: server.baseUrl,
     apiKey: 'sb_srv_test_key',
     bulkEvaluation: true,
-    pollingIntervalMs: 60000,
+    cacheTtlMs: 60000,
   });
   t.after(() => client.close());
 
@@ -280,7 +280,7 @@ test('revalidates with If-None-Match and reuses the cache on 304', async (t) => 
     baseUrl: server.baseUrl,
     apiKey: 'key',
     bulkEvaluation: true,
-    pollingIntervalMs: 50,
+    cacheTtlMs: 50,
   });
   t.after(() => client.close());
 
@@ -291,11 +291,9 @@ test('revalidates with If-None-Match and reuses the cache on 304', async (t) => 
   );
 
   assert.equal(first.value, true);
+  assert.equal(requests.length, 1);
 
-  await waitFor(() => requests.length >= 2);
-
-  assert.equal(requests[1].ifNoneMatch, '"bulk-v1"');
-  assert.equal(requests[1].status, 304);
+  await sleep(100);
 
   const second = await client.getBooleanDetails(
     'checkout',
@@ -307,6 +305,8 @@ test('revalidates with If-None-Match and reuses the cache on 304', async (t) => 
   assert.equal(second.reason, 'SPLIT');
   assert.equal(second.errorCode, undefined);
   assert.equal(requests.length, 2);
+  assert.equal(requests[1].ifNoneMatch, '"bulk-v1"');
+  assert.equal(requests[1].status, 304);
 });
 
 test('serves repeated evaluations from a fresh per-context cache', async (t) => {
@@ -331,7 +331,7 @@ test('serves repeated evaluations from a fresh per-context cache', async (t) => 
     baseUrl: server.baseUrl,
     apiKey: 'key',
     bulkEvaluation: true,
-    pollingIntervalMs: 60000,
+    cacheTtlMs: 60000,
   });
   t.after(() => client.close());
 
@@ -366,7 +366,7 @@ test('serves repeated evaluations from a fresh per-context cache', async (t) => 
   assert.equal(requestCount, 2);
 });
 
-test('pollingIntervalMs 0 fetches once and serves the cache indefinitely', async (t) => {
+test('keeps background polling disabled by default', async (t) => {
   let requestCount = 0;
   const server = await startServer((request, response) => {
     request.resume();
@@ -387,7 +387,7 @@ test('pollingIntervalMs 0 fetches once and serves the cache indefinitely', async
     baseUrl: server.baseUrl,
     apiKey: 'key',
     bulkEvaluation: true,
-    pollingIntervalMs: 0,
+    cacheTtlMs: 20,
   });
   t.after(() => client.close());
 
@@ -397,7 +397,10 @@ test('pollingIntervalMs 0 fetches once and serves the cache indefinitely', async
     { targetingKey: 'user-1' },
   );
 
-  await sleep(30);
+  await sleep(60);
+
+  assert.equal(first.value, true);
+  assert.equal(requestCount, 1);
 
   const second = await client.getBooleanDetails(
     'alpha',
@@ -405,9 +408,8 @@ test('pollingIntervalMs 0 fetches once and serves the cache indefinitely', async
     { targetingKey: 'user-1' },
   );
 
-  assert.equal(first.value, true);
   assert.equal(second.value, true);
-  assert.equal(requestCount, 1);
+  assert.equal(requestCount, 2);
 });
 
 test('maps missing and non-boolean bulk flags to error details', async (t) => {
@@ -428,7 +430,7 @@ test('maps missing and non-boolean bulk flags to error details', async (t) => {
     baseUrl: server.baseUrl,
     apiKey: 'key',
     bulkEvaluation: true,
-    pollingIntervalMs: 60000,
+    cacheTtlMs: 60000,
   });
   t.after(() => client.close());
 
@@ -490,7 +492,7 @@ test('retries 5xx responses up to maxRetries', async (t) => {
     bulkEvaluation: true,
     maxRetries: 2,
     retryBaseDelayMs: 0,
-    pollingIntervalMs: 60000,
+    cacheTtlMs: 60000,
   });
   t.after(() => client.close());
 
@@ -584,6 +586,7 @@ test('close stops background polling', async (t) => {
     apiKey: 'key',
     bulkEvaluation: true,
     pollingIntervalMs: 20,
+    cacheTtlMs: 60000,
   });
   t.after(() => client.close());
 
@@ -604,4 +607,280 @@ test('close stops background polling', async (t) => {
   await sleep(100);
 
   assert.equal(requestCount, afterClose);
+});
+
+test('refreshes the cached flag set after cacheTtlMs expires', async (t) => {
+  let requestCount = 0;
+  const ifNoneMatchHeaders: Array<string | undefined> = [];
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+
+      const ifNoneMatch = request.headers['if-none-match'];
+
+      ifNoneMatchHeaders.push(
+        typeof ifNoneMatch === 'string' ? ifNoneMatch : undefined,
+      );
+
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        etag: `"ttl-${requestCount}"`,
+      });
+      response.end(bulkResponse([
+        { key: 'alpha', value: requestCount === 1, reason: 'SPLIT' },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 50,
+  });
+  t.after(() => client.close());
+
+  const first = await client.getBooleanDetails(
+    'alpha',
+    false,
+    { targetingKey: 'user-1' },
+  );
+  const cached = await client.getBooleanDetails(
+    'alpha',
+    false,
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(first.value, true);
+  assert.equal(cached.value, true);
+  assert.equal(requestCount, 1);
+
+  await sleep(100);
+
+  const refreshed = await client.getBooleanDetails(
+    'alpha',
+    false,
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(refreshed.value, false);
+  assert.equal(requestCount, 2);
+  assert.equal(ifNoneMatchHeaders[1], '"ttl-1"');
+});
+
+test('cacheTtlMs 0 fetches on every evaluation', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        etag: '"no-cache-v1"',
+      });
+      response.end(bulkResponse([
+        { key: 'alpha', value: true, reason: 'SPLIT' },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 0,
+  });
+  t.after(() => client.close());
+
+  const first = await client.getBooleanDetails(
+    'alpha',
+    false,
+    { targetingKey: 'user-1' },
+  );
+  const second = await client.getBooleanDetails(
+    'alpha',
+    false,
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(first.value, true);
+  assert.equal(second.value, true);
+  assert.equal(requestCount, 2);
+});
+
+test('evicts the least recently used context at maxCachedContexts', async (t) => {
+  const contexts: string[] = [];
+  const server = await startServer((request, response) => {
+    let body = '';
+
+    request.on('data', (chunk) => {
+      body += chunk;
+    });
+    request.on('end', () => {
+      const payload = JSON.parse(body) as {
+        context: { targetingKey: string };
+      };
+      const targetingKey = payload.context.targetingKey;
+
+      contexts.push(targetingKey);
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        etag: `"lru-${targetingKey}"`,
+      });
+      response.end(bulkResponse([
+        {
+          key: 'flag',
+          value: targetingKey === 'a',
+          reason: 'SPLIT',
+        },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 60000,
+    maxCachedContexts: 1,
+  });
+  t.after(() => client.close());
+
+  const firstA = await client.getBooleanDetails(
+    'flag',
+    false,
+    { targetingKey: 'a' },
+  );
+  const firstB = await client.getBooleanDetails(
+    'flag',
+    false,
+    { targetingKey: 'b' },
+  );
+  const secondA = await client.getBooleanDetails(
+    'flag',
+    false,
+    { targetingKey: 'a' },
+  );
+
+  assert.equal(firstA.value, true);
+  assert.equal(firstB.value, false);
+  assert.equal(secondA.value, true);
+  assert.deepEqual(contexts, ['a', 'b', 'a']);
+
+  const cacheSize = (client as unknown as {
+    bulkCache: Map<string, unknown>;
+  }).bulkCache.size;
+
+  assert.equal(cacheSize, 1);
+});
+
+test('eviction clears the polling timer of the displaced context', async (t) => {
+  const polledContexts: string[] = [];
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    let body = '';
+
+    request.on('data', (chunk) => {
+      body += chunk;
+    });
+    request.on('end', () => {
+      requestCount += 1;
+      const payload = JSON.parse(body) as {
+        context: { targetingKey: string };
+      };
+
+      polledContexts.push(payload.context.targetingKey);
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        etag: `"poll-${payload.context.targetingKey}"`,
+      });
+      response.end(bulkResponse([
+        { key: 'flag', value: true, reason: 'SPLIT' },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 60000,
+    maxCachedContexts: 1,
+    pollingIntervalMs: 30,
+  });
+  t.after(() => client.close());
+
+  await client.getBooleanDetails('flag', false, { targetingKey: 'a' });
+  await client.getBooleanDetails('flag', false, { targetingKey: 'b' });
+
+  await waitFor(() => requestCount >= 4);
+
+  assert.equal(
+    polledContexts.filter((context) => context === 'a').length,
+    1,
+  );
+  assert.ok(
+    polledContexts.filter((context) => context === 'b').length >= 3,
+  );
+});
+
+test('background polling failures leave the cached flags untouched', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+
+      if (requestCount === 1) {
+        response.writeHead(200, {
+          'content-type': 'application/json',
+          etag: '"poll-failure-v1"',
+        });
+        response.end(bulkResponse([
+          { key: 'flag', value: true, reason: 'SPLIT' },
+        ]));
+        return;
+      }
+
+      response.writeHead(500, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { code: 'GENERAL' } }));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 60000,
+    pollingIntervalMs: 20,
+    maxRetries: 0,
+  });
+  t.after(() => client.close());
+
+  const first = await client.getBooleanDetails(
+    'flag',
+    false,
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(first.value, true);
+
+  await waitFor(() => requestCount >= 2);
+  await sleep(30);
+
+  const cached = await client.getBooleanDetails(
+    'flag',
+    false,
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(cached.value, true);
+  assert.equal(cached.reason, 'SPLIT');
+  assert.equal(cached.errorCode, undefined);
 });
