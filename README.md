@@ -304,7 +304,7 @@ and 10s per scenario; override them with `BENCH_CONNECTIONS` and
 DATABASE_URL=postgres://... npm run bench
 ```
 
-Current local suite: 106 tests, 103 pass, 3 skipped when `DATABASE_URL` is not
+Current local suite: 118 tests, 115 pass, 3 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)
