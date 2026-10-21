@@ -60,6 +60,12 @@ test('export/import CLI round-trips a SQLite database', async (t) => {
   assert.equal(invalid.status, 1);
   assert.match(invalid.stderr, /--file requires a value/);
 
+  const empty = run('scripts/export-config.mjs', ['--file='], {
+    V2_DB_PATH: sourcePath,
+  });
+  assert.equal(empty.status, 1);
+  assert.match(empty.stderr, /--file requires a value/);
+
   const exported = run('scripts/export-config.mjs', ['--file', backupPath], {
     V2_DB_PATH: sourcePath,
   });

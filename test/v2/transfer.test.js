@@ -289,19 +289,30 @@ test('is additive: keeps unrelated projects/flags and does not rename existing o
 
   assert.equal(production.name, 'Target Production');
 
-  for (const [project, environment, flagKey] of [
-    ['demo', 'production', 'keep-me'],
-    ['demo', 'production', 'new-checkout'],
-    ['unrelated', 'production', 'unrelated-flag'],
-  ]) {
-    const flag = await app.inject({
-      method: 'GET',
-      url: `/api/v1/projects/${project}/environments/${environment}/flags/${flagKey}`,
-      headers: AUTHORIZATION,
-    });
+  const keepMe = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/demo/environments/production/flags/keep-me',
+    headers: AUTHORIZATION,
+  });
+  const unrelatedFlag = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/unrelated/environments/production/flags/unrelated-flag',
+    headers: AUTHORIZATION,
+  });
 
-    assert.equal(flag.statusCode, 200, flag.body);
-  }
+  assert.equal(keepMe.statusCode, 200);
+  assert.equal(keepMe.json().enabled, true);
+  assert.equal(keepMe.json().rolloutPercentage, 100);
+  assert.equal(unrelatedFlag.statusCode, 200);
+  assert.equal(unrelatedFlag.json().enabled, false);
+  assert.equal(unrelatedFlag.json().rolloutPercentage, 0);
+
+  const newCheckout = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/demo/environments/production/flags/new-checkout',
+    headers: AUTHORIZATION,
+  });
+  assert.equal(newCheckout.statusCode, 200);
 });
 
 test('dry run reports changes without writing anything', async (t) => {

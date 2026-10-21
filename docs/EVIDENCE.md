@@ -446,7 +446,7 @@ node --test test/v2/transfer.test.js
 ✔ exports projects, environments, flags and configs without secrets
 ✔ round-trips into a fresh database with new IDs and matching values
 ✔ is idempotent on a second import
-✔ applies changed configs from a new export
+✔ applies changed descriptions and configs from a new export
 ✔ dry run reports changes without writing anything
 ✔ rejects invalid exports without partial writes
 ✔ never touches existing API keys
