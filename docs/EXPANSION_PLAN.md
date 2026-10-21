@@ -273,3 +273,17 @@ endpoints, deletion, or secret export in this track.
 Items 12.1–12.4 landed on `main` on 2026-10-21 (`9ab77b8`, `c367a82`,
 `1b4d26d`); test evidence and the remaining out-of-scope list are recorded in
 the task status at `docs/tasks/083-sdk-bulk-etag.md`.
+
+## 14. v2.1 observability track (approved)
+
+Task 085 (`docs/tasks/085-metrics.md`) adds a small, dependency-free Prometheus
+endpoint.
+
+| ID | Item | Acceptance |
+|---|---|---|
+| 14.1 | `GET /metrics` | Prometheus text 0.0.4 with HELP/TYPE; public, no-store |
+| 14.2 | Bounded labels | Route templates, methods, statuses, evaluation reasons; no user/flag/key labels |
+| 14.3 | Coverage | HTTP requests/latency histogram, evaluations, DB failures mapped to 503; tested without cross-app leakage |
+
+No OpenTelemetry, dashboards, alert rules, persistent metrics, or `/metrics`
+authentication in this track.
