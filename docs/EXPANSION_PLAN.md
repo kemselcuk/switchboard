@@ -285,5 +285,6 @@ endpoint.
 | 14.2 | Bounded labels | Route templates, methods, statuses, evaluation reasons; no user/flag/key labels |
 | 14.3 | Coverage | HTTP requests/latency histogram, evaluations, DB failures mapped to 503; tested without cross-app leakage |
 
-No OpenTelemetry, dashboards, alert rules, persistent metrics, or `/metrics`
+Landed on `main` in `d5ccbba`; see the task status for test evidence. No
+OpenTelemetry, dashboards, alert rules, persistent metrics, or `/metrics`
 authentication in this track.

@@ -490,6 +490,55 @@ DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm r
 ℹ pass 4
 ```
 
+### v2.1 metrics endpoint
+
+Task 085 adds a dependency-free Prometheus endpoint with bounded labels.
+
+```text
+node --test test/metrics.test.js
+✔ exposes Prometheus text with help, type, counters and histogram
+✔ records OFREP and legacy evaluation results
+✔ counts storage failures mapped to 503
+✔ uses route templates and exposes no tenant data
+✔ keeps metrics isolated per app instance
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+```
+
+Real scrape after one `/healthz` request:
+
+```text
+GET /metrics
+content-type: text/plain; version=0.0.4; charset=utf-8
+# HELP switchboard_http_requests_total HTTP responses by method, route template and status.
+# TYPE switchboard_http_requests_total counter
+switchboard_http_requests_total{method="GET",route="/healthz",status="200"} 1
+# HELP switchboard_http_request_duration_seconds HTTP response time in seconds.
+# TYPE switchboard_http_request_duration_seconds histogram
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.001"} 0
+switchboard_http_request_duration_seconds_bucket{method="GET",route="/healthz",status="200",le="0.005"} 1
+switchboard_http_request_duration_seconds_sum{method="GET",route="/healthz",status="200"} 0.002093
+switchboard_http_request_duration_seconds_count{method="GET",route="/healthz",status="200"} 1
+# HELP switchboard_flag_evaluations_total Flag evaluations by result reason.
+# TYPE switchboard_flag_evaluations_total counter
+# HELP switchboard_db_failures_total Responses mapped to 503 EVALUATION_UNAVAILABLE.
+# TYPE switchboard_db_failures_total counter
+```
+
+Full suite after the change:
+
+```text
+npm test
+ℹ tests 138
+ℹ suites 0
+ℹ pass 134
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 4
+ℹ todo 0
+```
+
 ## Historical v1 evidence
 
 ## 1. Automated tests

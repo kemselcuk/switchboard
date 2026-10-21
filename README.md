@@ -29,6 +29,7 @@ project isolation, 20%→40% monotonicity, two services, and the legacy API.
 - Legacy `/api/flags` and `/api/evaluate` continue to work.
 - SQLite → Postgres migration for existing flags.
 - Versioned JSON configuration export/import (API keys excluded).
+- Dependency-free Prometheus `/metrics` endpoint.
 
 Targeting rules/segments, string/number/JSON flag types, a full admin dashboard,
 audit/RBAC, browser SDK, and streaming are planned for later versions.
@@ -49,6 +50,7 @@ The stack starts Postgres, runs migrations, and serves:
 - v2 projects/OFREP demo: http://localhost:3000/v2.html
 - Health (liveness): http://localhost:3000/healthz
 - Readiness (storage ping): http://localhost:3000/readyz
+- Metrics (Prometheus text): http://localhost:3000/metrics
 - Management API: http://localhost:3000/api/v1
 - OFREP: http://localhost:3000/ofrep/v1
 
@@ -325,6 +327,31 @@ The format is
 `switchboard-v2-export` version `1`; flags are listed per environment only when
 a config exists there.
 
+## Metrics
+
+`GET /metrics` exposes Prometheus text format 0.0.4 for self-hosted monitoring.
+It is public like `/healthz` and contains no tenant data, API keys, flag keys,
+or raw paths.
+
+- `switchboard_http_requests_total{method,route,status}` — response counter; the
+  route label is the Fastify template (for example `/api/flags/:key`).
+- `switchboard_http_request_duration_seconds` — histogram with fixed buckets.
+- `switchboard_flag_evaluations_total{result}` — OFREP and legacy evaluation
+  reasons (`SPLIT`, `DISABLED`, `BUCKET_INCLUDED`, ...).
+- `switchboard_db_failures_total` — responses mapped to `503`.
+
+Example scrape:
+
+```text
+curl -sS http://localhost:3000/metrics
+# HELP switchboard_http_requests_total HTTP responses by method, route template and status.
+# TYPE switchboard_http_requests_total counter
+switchboard_http_requests_total{method="GET",route="/healthz",status="200"} 1
+```
+
+Add a Prometheus scrape target for `/metrics`; there is no authentication,
+persistence, OpenTelemetry, or per-user labeling.
+
 ## Tests
 
 ```bash
@@ -353,7 +380,7 @@ that database and does not delete them (v2.0 has no project/flag deletion);
 point it at a dedicated benchmark database. Numbers are from one run and are
 directional, not a capacity guarantee.
 
-Current local suite: 133 tests, 129 pass, 4 skipped when `DATABASE_URL` is not
+Current local suite: 138 tests, 134 pass, 4 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)
@@ -365,6 +392,7 @@ src/
   app.js                 # Fastify app factory
   server.js              # env, v1/v2 selection, graceful shutdown
   db.js                  # v1 SQLite
+  metrics.js             # dependency-free Prometheus registry
   flags/                 # v1 legacy routes/repository/evaluator
   v2/
     db.js                # Kysely Postgres/SQLite + migrations

@@ -452,3 +452,26 @@ endpoint.
 - Import is not safe for two concurrent imports of the same new flag: the
   per-project legacy-id allocation can race (the import fails rather than
   corrupting data).
+
+## ADR-026 — Dependency-free Prometheus metrics
+
+**Context:** Self-hosted operators need request, latency, evaluation, and
+storage-failure visibility. Adding an OpenTelemetry SDK or a sidecar would grow
+the dependency and deployment surface of a deliberately small service.
+
+**Decision:** Implement a tiny in-process registry (`src/metrics.js`) and expose
+`GET /metrics` in Prometheus text format 0.0.4. Metrics cover HTTP responses and
+latency (route templates, methods, statuses), evaluation reasons, and 503
+storage failures. Labels are bounded; user IDs, flag keys, API keys, and raw
+request paths are never used. The endpoint is public like `/healthz`, returns
+`Cache-Control: no-store`, and each `buildApp` instance owns its registry.
+
+**Consequences:**
+- Operators can scrape the service without new dependencies or a sidecar.
+- Metrics are process-local and reset on restart; there is no persistence or
+  aggregation.
+- Cardinality stays bounded even with many flags/users, at the cost of losing
+  per-flag/per-user breakdowns.
+- The public endpoint reveals aggregate traffic volume but no tenant data.
+- OpenTelemetry, dashboards, alert rules, exemplars, and tracing remain out of
+  scope.

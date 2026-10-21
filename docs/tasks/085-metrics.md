@@ -65,3 +65,16 @@ dashboards, alert rules, rate limiting, and authentication for `/metrics`.
 
 Implement directly (provider blocking on this task family); run tests; update
 docs; one independent review round if available.
+
+## Status (2026-10-21)
+
+Landed on `main`:
+
+- `d5ccbba` — dependency-free metrics registry, `/metrics`, HTTP hooks,
+  evaluation counters, 503 failure counter, and tests.
+
+`npm test`: 138 tests (134 pass, 4 Postgres skips); metrics tests 5/5. Real
+output is recorded in `docs/EVIDENCE.md` under "v2.1 metrics endpoint".
+
+Still out of scope: OpenTelemetry, persistence, dashboards, alert rules,
+per-user/per-flag labels, `/metrics` authentication, and rate limiting.
