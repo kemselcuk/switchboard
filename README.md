@@ -401,7 +401,7 @@ that database and does not delete them (v2.0 has no project/flag deletion);
 point it at a dedicated benchmark database. Numbers are from one run and are
 directional, not a capacity guarantee.
 
-Current local suite: 143 tests, 139 pass, 4 skipped when `DATABASE_URL` is not
+Current local suite: 144 tests, 139 pass, 5 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)

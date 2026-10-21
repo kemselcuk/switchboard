@@ -589,12 +589,12 @@ DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm r
 
 ```text
 npm test
-ℹ tests 143
+ℹ tests 144
 ℹ suites 0
 ℹ pass 139
 ℹ fail 0
 ℹ cancelled 0
-ℹ skipped 4
+ℹ skipped 5
 ℹ todo 0
 ```
 
