@@ -499,6 +499,9 @@ node --test test/metrics.test.js
 ✔ exposes Prometheus text with help, type, counters and histogram
 ✔ records OFREP and legacy evaluation results
 ✔ counts storage failures mapped to 503
+✔ counts OFREP storage failures and readiness failures
+✔ counts bulk results once and not on 304
+✔ counts OFREP FLAG_NOT_FOUND like the legacy route
 ✔ uses route templates and exposes no tenant data
 ✔ keeps metrics isolated per app instance
 ℹ tests 8
