@@ -3,10 +3,12 @@ import { AppError } from '../../errors.js';
 import { createApiKeyRepository } from '../repositories/api-keys.js';
 import { createFlagRepository } from '../repositories/flags.js';
 import { createProjectRepository } from '../repositories/projects.js';
+import { createTargetingRepository } from '../repositories/targeting.js';
 import {
   apiKeyParams,
   createApiKeyBody,
   createFlagBody,
+  createSegmentBody,
   environmentBody,
   environmentParams,
   flagParams,
@@ -14,8 +16,12 @@ import {
   projectBody,
   projectFlagParams,
   projectParams,
+  replaceRulesBody,
+  segmentParams,
   updateFlagBody,
+  updateSegmentBody,
 } from '../schemas.js';
+import { conditionsError, rulesError } from '../targeting.js';
 
 function validationError(message) {
   return new AppError(400, 'VALIDATION_ERROR', message);
@@ -23,6 +29,22 @@ function validationError(message) {
 
 function assertFlagValues(type, onValue, offValue) {
   const message = flagValuesError(type, onValue, offValue);
+
+  if (message) {
+    throw validationError(message);
+  }
+}
+
+function assertConditions(conditions) {
+  const message = conditionsError(conditions);
+
+  if (message) {
+    throw validationError(message);
+  }
+}
+
+function assertRules(rules) {
+  const message = rulesError(rules);
 
   if (message) {
     throw validationError(message);
@@ -67,10 +89,29 @@ function toFlagResponse(flag) {
   return response;
 }
 
+function toSegmentResponse(segment) {
+  return {
+    key: segment.key,
+    name: segment.name,
+    conditions: segment.conditions,
+    createdAt: segment.createdAt,
+    updatedAt: segment.updatedAt,
+  };
+}
+
+function toRuleResponse(rule) {
+  if (rule.segmentKey !== undefined) {
+    return { segmentKey: rule.segmentKey, action: rule.action };
+  }
+
+  return { conditions: rule.conditions, action: rule.action };
+}
+
 export async function managementRoutes(app, { db, adminToken }) {
   const projects = createProjectRepository(db);
   const flags = createFlagRepository(db);
   const apiKeys = createApiKeyRepository(db);
+  const targeting = createTargetingRepository(db);
 
   app.addHook('onRequest', createAuthHook(adminToken));
 
@@ -223,6 +264,118 @@ export async function managementRoutes(app, { db, adminToken }) {
       );
 
       return toFlagResponse(flag);
+    },
+  );
+
+  app.post(
+    '/api/v1/projects/:project/segments',
+    { schema: { params: projectParams, body: createSegmentBody } },
+    async (request, reply) => {
+      const project = await projects.getProjectByKey(request.params.project);
+      const body = request.body;
+
+      assertConditions(body.conditions);
+
+      const segment = await targeting.createSegment(project.id, body);
+
+      return reply.code(201).send(toSegmentResponse(segment));
+    },
+  );
+
+  app.get(
+    '/api/v1/projects/:project/segments',
+    { schema: { params: projectParams } },
+    async (request) => {
+      const project = await projects.getProjectByKey(request.params.project);
+      const list = await targeting.listSegments(project.id);
+
+      return { segments: list.map(toSegmentResponse) };
+    },
+  );
+
+  app.get(
+    '/api/v1/projects/:project/segments/:key',
+    { schema: { params: segmentParams } },
+    async (request) => {
+      const project = await projects.getProjectByKey(request.params.project);
+      const segment = await targeting.getSegment(
+        project.id,
+        request.params.key,
+      );
+
+      return toSegmentResponse(segment);
+    },
+  );
+
+  app.put(
+    '/api/v1/projects/:project/segments/:key',
+    { schema: { params: segmentParams, body: updateSegmentBody } },
+    async (request) => {
+      const project = await projects.getProjectByKey(request.params.project);
+
+      assertConditions(request.body.conditions);
+
+      const segment = await targeting.updateSegment(
+        project.id,
+        request.params.key,
+        request.body,
+      );
+
+      return toSegmentResponse(segment);
+    },
+  );
+
+  app.delete(
+    '/api/v1/projects/:project/segments/:key',
+    { schema: { params: segmentParams } },
+    async (request) => {
+      const project = await projects.getProjectByKey(request.params.project);
+
+      return targeting.deleteSegment(project.id, request.params.key);
+    },
+  );
+
+  app.get(
+    '/api/v1/projects/:project/environments/:env/flags/:key/rules',
+    { schema: { params: flagParams } },
+    async (request) => {
+      const { project, environment } = await resolveEnvironment(request);
+      const flag = await flags.getFlag(
+        project.id,
+        environment.id,
+        request.params.key,
+      );
+      const list = await targeting.listRules(
+        project.id,
+        environment.id,
+        flag.id,
+      );
+
+      return { rules: list.map(toRuleResponse) };
+    },
+  );
+
+  app.put(
+    '/api/v1/projects/:project/environments/:env/flags/:key/rules',
+    { schema: { params: flagParams, body: replaceRulesBody } },
+    async (request) => {
+      const { project, environment } = await resolveEnvironment(request);
+      const flag = await flags.getFlag(
+        project.id,
+        environment.id,
+        request.params.key,
+      );
+
+      assertRules(request.body.rules);
+
+      const list = await targeting.replaceRules(
+        project.id,
+        environment.id,
+        flag.id,
+        request.body.rules,
+      );
+
+      return { rules: list.map(toRuleResponse) };
     },
   );
 

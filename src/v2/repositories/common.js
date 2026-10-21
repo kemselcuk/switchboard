@@ -5,6 +5,11 @@ export function isUniqueViolation(error) {
     || /unique constraint failed/i.test(error?.message ?? '');
 }
 
+export function isForeignKeyViolation(error) {
+  return error?.code === '23503'
+    || /foreign key constraint failed/i.test(error?.message ?? '');
+}
+
 export function conflict(code, message) {
   return new AppError(409, code, message);
 }
