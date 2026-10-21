@@ -254,3 +254,7 @@ OFREP endpoint that the server already supports:
 Direct SDK users keep the single-flag path unless they opt in; the provider
 opts in by default. No server changes, no persistent client cache, and no
 stale-if-error policy in this task.
+
+Items 12.1–12.4 landed on `main` on 2026-10-21 (`38959e5`, `c367a82`,
+`1b4d26d`); test evidence and the remaining out-of-scope list are recorded in
+the task status at `docs/tasks/083-sdk-bulk-etag.md`.

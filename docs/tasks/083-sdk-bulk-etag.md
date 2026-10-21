@@ -81,3 +81,21 @@ persistent client cache, stale-if-error policies, and server changes.
 
 Sequential: SDK core first; provider + docs after the SDK lands; independent
 review round at the end.
+
+## Status (2026-10-21)
+
+Landed on `main`:
+
+- `38959e5` — SDK core: bulk evaluation, per-context cache, `ETag` / `304`
+  refresh, bounded retries.
+- `c367a82` — bounded LRU cache, opt-in polling, `close()`, cache TTL and
+  eviction coverage.
+- `1b4d26d` — OpenFeature provider enables bulk by default and implements
+  `onClose()`.
+
+Tests: SDK 19, provider 5 (`npm run test:workspaces`); root suite 122 tests
+(119 pass, 3 Postgres skips) and OFREP contract 11 pass. Real output is recorded
+in `docs/EVIDENCE.md` under "v2.1 SDK bulk + ETag".
+
+Still out of scope: persistent/shared client cache, stale-if-error, browser SDK,
+metrics, targeting rules, and server changes.

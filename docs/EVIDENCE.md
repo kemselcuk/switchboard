@@ -364,6 +364,73 @@ OK: v2.down-up.value = true
 Smoke test passed: legacy and v2 flags survived restart and down/up.
 ```
 
+### v2.1 SDK bulk + ETag
+
+Task 083 moved the Node SDK to the bulk OFREP endpoint with a bounded
+per-context cache, `ETag` / `If-None-Match` / `304` conditional refresh, opt-in
+polling, `close()`, and bounded retries; the OpenFeature provider uses bulk by
+default and polling stays off unless `pollingIntervalMs` is set. The commands
+below were run from the repository root on 2026-10-21 after `npm ci`.
+
+```text
+npm test
+✔ default project and environment seeding is idempotent under concurrency (41.472ms)
+ℹ tests 122
+ℹ suites 0
+ℹ pass 119
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 2217.176417
+```
+
+The 3 skipped tests are the Postgres integration tests, which run when
+`DATABASE_URL` is set.
+
+```text
+npm run test:contract
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 510.792083
+```
+
+```text
+npm run test:workspaces
+> @switchboard/openfeature-provider@2.0.0 test
+> tsx --test test/*.test.ts
+...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 260.535458
+```
+
+```text
+> @switchboard/sdk@2.0.0 test
+> tsx --test test/*.test.ts
+...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2052.318292
+```
+
 ## Historical v1 evidence
 
 ## 1. Automated tests

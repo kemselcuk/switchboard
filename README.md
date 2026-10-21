@@ -109,6 +109,14 @@ const enabled = await client.getBooleanValue(
 );
 ```
 
+The SDK uses one request per flag by default. `bulkEvaluation: true` uses the
+bulk OFREP endpoint with a per-context cache; `cacheTtlMs` (default 10s),
+`pollingIntervalMs` (background refresh, off by default), and
+`maxRetries`/`retryBaseDelayMs` (bounded retries for network errors and `5xx`
+only) tune freshness and transport behavior. See
+[`packages/sdk-node/README.md`](packages/sdk-node/README.md) for the options
+table and the polling/staleness trade-off.
+
 ### OpenFeature provider
 
 ```js
@@ -129,6 +137,10 @@ const enabled = await client.getBooleanValue(
   { targetingKey: userId },
 );
 ```
+
+The provider enables bulk evaluation by default, so one request serves all
+flags for a context; polling stays off unless `pollingIntervalMs` is set.
+Pass `bulkEvaluation: false` to return to single-flag requests.
 
 ### Two-service demo
 
@@ -356,10 +368,12 @@ examples/
 - v2.0 supports boolean flags only; targeting rules, segments, and
   string/number/JSON flags are later work.
 - Server API keys only; browser/client keys and a browser SDK are later work.
-- Single Postgres instance target; flag/config evaluation reads are uncached.
-  The only cache is a process-local 5s API-key prefix cache (multi-instance
-  revocation may lag up to 5s; an in-flight lookup can still complete with the
-  pre-revocation row); no streaming or rate limiting yet.
+- Single Postgres instance target; server-side flag/config evaluation reads
+  are uncached. The only server-side cache is a process-local 5s API-key prefix
+  cache (multi-instance revocation may lag up to 5s; an in-flight lookup can
+  still complete with the pre-revocation row). The SDK's optional bulk cache is
+  process-local to the calling service (ADR-024). No streaming or rate limiting
+  yet.
 - The v1 browser demo and video are in Turkish; the v2 demo video and the v2
   API/docs are in English.
 - Feature flags must not replace authorization.

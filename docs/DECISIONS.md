@@ -384,3 +384,39 @@ reads stay uncached; ADR-007 remains in force for them.
 - The cache is process-local and disappears on restart.
 - Newly created keys are never shadowed by a negative cache.
 - Expired entries no longer accumulate indefinitely.
+
+## ADR-024 — Client-side bulk cache and conditional refresh
+
+**Context:** The server already supports bulk OFREP evaluation and quoted ETags
+with `304 Not Modified` (ADR-020). A per-flag client multiplies network calls by
+the number of flags a service evaluates for one context, even though the same
+flag set is usually evaluated repeatedly for that context.
+
+**Decision:** The Node SDK offers opt-in bulk mode (`bulkEvaluation`, default
+`false`). In bulk mode it calls `POST /ofrep/v1/evaluate/flags`, caches the flag
+set per evaluation context (keyed by the full context in stable key order), and
+treats entries as fresh for `cacheTtlMs` (default 10000 ms; `0` disables
+caching). A stale entry is refreshed with `If-None-Match`: `304` refreshes the
+timestamp and keeps the cached flags, `200` replaces the entry. The cache is
+bounded by `maxCachedContexts` (default 1000) with LRU eviction that also clears
+the entry's polling timer. One request is in flight per context. Background
+polling is opt-in (`pollingIntervalMs`, default `0`; timers are `unref()`ed),
+and `close()` clears all timers and cache entries. Transport retries are bounded
+(`maxRetries`, default 2, exponential backoff with jitter) and apply only to
+network errors, timeouts, and 5xx responses, never 4xx. On final failure the
+client returns the default with an error code; it does not serve stale values.
+The OpenFeature provider enables bulk by default (explicit `bulkEvaluation:
+false` wins) and leaves polling off.
+
+**Consequences:**
+- One bulk request serves many flag evaluations for the same context.
+- Staleness is bounded by `cacheTtlMs`; polling is only needed for long-lived,
+  stable contexts.
+- Cache state is process-local and disappears on restart; multiple service
+  instances do not share it.
+- Memory and timer count are bounded by `maxCachedContexts`.
+- Polling and shorter TTLs trade request volume for freshness.
+- There is no stale-if-error behavior; callers keep their own fallback policy
+  (ADR-003).
+- Per-flag mode remains the default for direct SDK users, so existing behavior
+  is unchanged unless bulk is requested.

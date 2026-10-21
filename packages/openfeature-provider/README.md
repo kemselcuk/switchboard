@@ -42,6 +42,14 @@ const enabled = await client.getBooleanValue(
 ## Behavior
 
 - Implements boolean evaluation through `@switchboard/sdk`.
+- Bulk evaluation is **on by default**: the first evaluation for a context
+  fetches all flags with one `POST /ofrep/v1/evaluate/flags` request and later
+  evaluations for that context use the SDK cache. Pass `bulkEvaluation: false`
+  to restore single-flag requests.
+- Background polling is **off** unless `pollingIntervalMs` is set; it is opt-in
+  through the SDK options.
+- `onClose()` calls `client.close()`, which clears polling timers and the
+  per-context cache.
 - String, number, and object evaluation return the code default with
   `TYPE_MISMATCH`, because v2.0 supports boolean flags only.
 - Unknown flags, invalid keys, storage failures, timeouts, and network errors
