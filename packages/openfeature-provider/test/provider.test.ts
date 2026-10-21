@@ -112,6 +112,56 @@ test('resolves two flags for one context with a single bulk request', async (t) 
   assert.deepEqual(requests[0].body, { context });
 });
 
+test('treats an explicit bulkEvaluation: undefined as the bulk default', async (t) => {
+  const requests: Array<{ method?: string; url?: string; body: unknown }> = [];
+  const server = await startServer((request, response) => {
+    let body = '';
+
+    request.on('data', (chunk) => {
+      body += chunk;
+    });
+    request.on('end', () => {
+      requests.push({
+        method: request.method,
+        url: request.url,
+        body: JSON.parse(body),
+      });
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        etag: '"bulk-default"',
+      });
+      response.end(bulkResponse([
+        { key: 'alpha', value: true, reason: 'SPLIT' },
+        { key: 'beta', value: false, reason: 'DEFAULT' },
+      ]));
+    });
+  });
+  const provider = new SwitchboardProvider({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: undefined,
+  });
+  t.after(async () => {
+    await OpenFeature.clearProviders();
+    provider.onClose();
+    await server.close();
+  });
+
+  await OpenFeature.setProviderAndWait(provider);
+  const client = OpenFeature.getClient();
+  const context = { targetingKey: 'user-1' };
+
+  const alpha = await client.getBooleanDetails('alpha', false, context);
+  const beta = await client.getBooleanDetails('beta', true, context);
+
+  assert.equal(alpha.value, true);
+  assert.equal(beta.value, false);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].url, '/ofrep/v1/evaluate/flags');
+  assert.deepEqual(requests[0].body, { context });
+});
+
 test('maps an unknown flag in a bulk response to FLAG_NOT_FOUND', async (t) => {
   const server = await startServer((request, response) => {
     request.resume();

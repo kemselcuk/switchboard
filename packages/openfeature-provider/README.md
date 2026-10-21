@@ -45,7 +45,8 @@ const enabled = await client.getBooleanValue(
 - Bulk evaluation is **on by default**: the first evaluation for a context
   fetches all flags with one `POST /ofrep/v1/evaluate/flags` request and later
   evaluations for that context use the SDK cache. Pass `bulkEvaluation: false`
-  to restore single-flag requests.
+  to restore single-flag requests; omitting the option or passing `undefined`
+  keeps bulk on.
 - Background polling is **off** unless `pollingIntervalMs` is set; it is opt-in
   through the SDK options.
 - `onClose()` calls `client.close()`, which clears polling timers and the

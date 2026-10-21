@@ -52,8 +52,8 @@ export class SwitchboardProvider implements Provider {
 
   constructor(options: SwitchboardProviderOptions) {
     this.client = new SwitchboardClient({
-      bulkEvaluation: true,
       ...options,
+      bulkEvaluation: options.bulkEvaluation ?? true,
     });
   }
 

@@ -366,11 +366,12 @@ Smoke test passed: legacy and v2 flags survived restart and down/up.
 
 ### v2.1 SDK bulk + ETag
 
-Task 083 moved the Node SDK to the bulk OFREP endpoint with a bounded
-per-context cache, `ETag` / `If-None-Match` / `304` conditional refresh, opt-in
-polling, `close()`, and bounded retries; the OpenFeature provider uses bulk by
-default and polling stays off unless `pollingIntervalMs` is set. The commands
-below were run from the repository root on 2026-10-21 after `npm ci`.
+Task 083 adds opt-in bulk mode to the Node SDK; the OpenFeature provider
+enables it by default. The SDK adds a bounded per-context cache, `ETag` /
+`If-None-Match` / `304` conditional refresh, opt-in polling, `close()`, and
+bounded retries; the provider keeps polling off unless `pollingIntervalMs` is
+set. The commands below were run from the repository root on 2026-10-21 after
+`npm ci`.
 
 ```text
 npm test

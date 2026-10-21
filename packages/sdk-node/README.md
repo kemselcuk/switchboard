@@ -49,7 +49,7 @@ console.log(details.value, details.reason, details.errorCode);
 | `timeoutMs` | `1000` | Per-attempt request timeout |
 | `fetch` | global `fetch` | Custom fetch implementation |
 | `bulkEvaluation` | `false` | Use the bulk endpoint and cache the flag set per context |
-| `cacheTtlMs` | `10000` | Cache freshness window; `0` disables caching |
+| `cacheTtlMs` | `10000` | Cache freshness window; `0` forces a refresh on every evaluation |
 | `pollingIntervalMs` | `0` | Background refresh interval; `0` disables polling |
 | `maxCachedContexts` | `1000` | LRU bound on cached contexts and their timers |
 | `maxRetries` | `2` | Extra attempts for network errors and 5xx responses |
@@ -80,12 +80,16 @@ const search = await client.getBooleanDetails('new-search', false, context);
 
 The cache key is the full evaluation context in stable key order, not only
 `targetingKey`. Two contexts that differ in any attribute are separate entries.
-At most one request is in flight per context; concurrent evaluations share it.
+Contexts must be JSON-serializable plain objects: `Date`, `Map`, `Set`, and
+class instances are not supported as cache keys. At most one request is in
+flight per context; concurrent evaluations share it.
 
 The cached flag set is fresh for `cacheTtlMs`. A stale entry triggers a
 conditional bulk request with `If-None-Match`: `304 Not Modified` refreshes the
 entry timestamp and keeps the cached flags, while `200` replaces the entry.
-`cacheTtlMs: 0` disables caching, so every evaluation performs a request.
+`cacheTtlMs: 0` forces a conditional refresh on every evaluation, but a `304`
+can still reuse the last fetched flag set, so it does not disable caching
+absolutely.
 
 ### Polling
 
@@ -102,7 +106,8 @@ usually need neither a long TTL nor polling. The cache is process-local, so each
 service instance has its own copy.
 
 Call `close()` on shutdown. It clears every polling timer and cached entry; the
-OpenFeature provider calls it from `onClose()`.
+OpenFeature provider calls it from `onClose()`. A closed client is not disabled:
+later evaluations may repopulate the bounded cache, but polling stays off.
 
 ### Failures
 
