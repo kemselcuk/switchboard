@@ -333,3 +333,19 @@ beyond boolean while keeping deterministic percentage rollout.
 Landed on `main` in `793f4cc` (server core) and `52a9422` (SDK/provider); see
 the task statuses and `docs/EVIDENCE.md` for test evidence. Out of scope: targeting rules, variants/weights, UI controls,
 flag type changes, and non-boolean legacy API support.
+
+## 18. v2.1 targeting track (approved)
+
+Task 090 (`docs/tasks/090-targeting-rules.md`) adds context-based targeting
+without a rule language or experiment engine.
+
+| ID | Item | Acceptance |
+|---|---|---|
+| 18.1 | Segments | Project-scoped key/name, ANDed `eq` conditions on primitives; CRUD with immutable key |
+| 18.2 | Flag rules | Ordered first-match rules per flag+environment, using a segment or inline conditions; action `on`/`off` |
+| 18.3 | Evaluation | Disabled > first match (`TARGETING_MATCH`) > deterministic rollout; strict typed equality; `targetingKey` usable |
+| 18.4 | Consistency | ETag includes rules/segments; segment delete blocked while referenced; flag delete cascades rules |
+| 18.5 | Portability | Export/import and Postgres coverage for segments/rules |
+
+Out of scope: extra operators (in/gt/regex/OR/NOT), percentage inside rules,
+variants/weights, segment nesting, UI, experiments, and analytics.
