@@ -99,12 +99,14 @@ endpoint.
 **Context:** There is a single instance and a small data set. A cache introduces
 inconsistency after updates and additional complexity.
 
-**Decision:** Every evaluation reads from SQLite; no cache.
+**Decision:** Every flag/config evaluation reads from SQLite; no cache.
+(ADR-023 adds a short-TTL cache for API-key authentication lookups only; flag
+and config reads stay uncached.)
 
 **Consequences:**
 - Updates are visible on the next request.
 - SQLite read cost is acceptable at this scale.
-- Horizontal scaling and caching are out of scope.
+- Horizontal scaling and flag-config caching are out of scope.
 
 ## ADR-008 — Trunk-based git and a push for every green task
 
@@ -346,13 +348,17 @@ usable, not merely whether the process is running. `/healthz` must stay cheap an
 independent so a storage problem does not cause the process to be restarted.
 
 **Decision:** `GET /readyz` performs a storage ping (`select 1` through Kysely in
-v2, `SELECT 1` on `better-sqlite3` in v1). On failure it returns `503` with the
-shared `{ error: { code: 'EVALUATION_UNAVAILABLE', message: 'Flag storage is unavailable' } }`
-envelope and never leaks internals. `/healthz` remains `{ status: 'ok' }` with no
-I/O. The endpoint is public like `/healthz`.
+v2, `SELECT 1` on `better-sqlite3` in v1) bounded by a 2-second timeout. On
+failure or timeout it returns `503` with the shared
+`{ error: { code: 'EVALUATION_UNAVAILABLE', message: 'Flag storage is unavailable' } }`
+envelope, logs only the error code at warn level, and never leaks internals.
+`/healthz` remains `{ status: 'ok' }` with no I/O. With an injected repository
+and no owned storage there is nothing to probe, so the endpoint reports ready.
+The endpoint is public like `/healthz`.
 
 **Consequences:**
 - Readiness reflects storage, not just process liveness.
+- A partitioned database cannot hang the probe indefinitely.
 - A failing probe does not change evaluation semantics.
 - No auth is added because the probe exposes no tenant data.
 
@@ -365,12 +371,15 @@ adding one query per request on top of the flag/config read.
 using a module-level `WeakMap` so the auth hook and management routes share
 entries. The TTL is 5000 ms and only positive entries are cached; unknown
 prefixes are not cached. The whole cache is invalidated on create and revoke, and
-cached `last_used_at` is refreshed when the throttled touch writes. Flag/config
-evaluation reads stay uncached; ADR-007 is unchanged.
+cached `last_used_at` is refreshed when the throttled touch writes. A per-cache
+generation counter prevents an in-flight lookup from re-caching a row after an
+invalidation, and expired entries are swept on access. Flag/config evaluation
+reads stay uncached; ADR-007 remains in force for them.
 
 **Consequences:**
 - One fewer DB query per evaluation.
-- Revocation is immediate in-process, but multi-instance deployments may serve a
-  revoked key for up to 5 seconds.
+- Revocation is immediate in-process, including for in-flight lookups, but
+  multi-instance deployments may serve a revoked key for up to 5 seconds.
 - The cache is process-local and disappears on restart.
 - Newly created keys are never shadowed by a negative cache.
+- Expired entries no longer accumulate indefinitely.

@@ -67,6 +67,18 @@ wait_for_health() {
     process.stdout.write(await response.text());
   ' "$BASE_URL/healthz")
   echo "health: ${body}"
+
+  local readiness
+  readiness=$(node --input-type=module -e '
+    const response = await fetch(process.argv[1]);
+    const body = await response.text();
+    if (!response.ok) {
+      console.error(body);
+      process.exit(1);
+    }
+    process.stdout.write(body);
+  ' "$BASE_URL/readyz")
+  echo "readiness: ${readiness}"
 }
 
 request() {

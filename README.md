@@ -56,8 +56,9 @@ pings storage and returns `503` with the shared
 `{ "error": { "code": "EVALUATION_UNAVAILABLE", "message": ... } }` envelope
 when storage is unavailable.
 
-On Postgres, `DATABASE_POOL_MAX` (integer ≥ 1) sets the `pg` pool size. Unset
-or invalid values keep the `pg` default of 10.
+On Postgres, `DATABASE_POOL_MAX` (integer `1..1000`) sets the `pg` pool size.
+Unset or invalid values keep the `pg` default of 10. `/readyz` bounds the probe
+to 2 seconds, so a partitioned database cannot hang the readiness check.
 
 `docker compose down` keeps the Postgres volume. `docker compose down -v`
 removes it. Both ports bind to `127.0.0.1` by default; override `BIND_ADDRESS`
@@ -294,17 +295,23 @@ npm run bench         # OFREP load benchmark (see below)
 ```
 
 `npm run bench` is a dependency-free load driver. It starts a local server on a
-free port with a temporary SQLite database, creates a throwaway benchmark
-project/flag/API key, and reports requests/sec plus average, p50, and p99
-latency for single-flag and bulk OFREP evaluation. Defaults are 10 connections
-and 10s per scenario; override them with `BENCH_CONNECTIONS` and
-`BENCH_DURATION`. To run against Postgres instead, set `DATABASE_URL`:
+free port, creates a benchmark project/flag/API key, and reports requests/sec
+plus average, p50, and p99 latency for single-flag and bulk OFREP evaluation.
+Defaults are 10 connections and 10s per scenario; override them with
+`BENCH_CONNECTIONS` and `BENCH_DURATION`. SQLite mode uses a temporary database
+that is removed afterwards. To run against Postgres instead, set
+`DATABASE_URL`:
 
 ```bash
 DATABASE_URL=postgres://... npm run bench
 ```
 
-Current local suite: 118 tests, 115 pass, 3 skipped when `DATABASE_URL` is not
+Postgres mode writes the benchmark project, environment, flag, and API key to
+that database and does not delete them (v2.0 has no project/flag deletion);
+point it at a dedicated benchmark database. Numbers are from one run and are
+directional, not a capacity guarantee.
+
+Current local suite: 122 tests, 119 pass, 3 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)
@@ -349,7 +356,9 @@ examples/
 - v2.0 supports boolean flags only; targeting rules, segments, and
   string/number/JSON flags are later work.
 - Server API keys only; browser/client keys and a browser SDK are later work.
-- Single Postgres instance target; no streaming/cache/rate limiting yet.
+- Single Postgres instance target; flag/config evaluation reads are uncached.
+  The only cache is a process-local 5s API-key prefix cache (multi-instance
+  revocation may lag up to 5s); no streaming or rate limiting yet.
 - The v1 browser demo and video are in Turkish; the v2 demo video and the v2
   API/docs are in English.
 - Feature flags must not replace authorization.

@@ -8,9 +8,9 @@ evidence. All sections are filled with real output.
 
 ## Environment
 
-- Date: 2026-10-20
+- Date: 2026-10-20 (v2.0.0); 2026-10-21 (v2.1 quick wins)
 - Machine: macOS (arm64), Node.js 22.23.2, Docker 29.8.1, SQLite 3.51.0
-- Release: `v2.0.0` (tag after review findings close)
+- Release: `v2.0.0` (tagged at `e597300`); v2.1 quick wins on `main` after it
 - GitHub: https://github.com/kemselcuk/switchboard
 
 ## v2.0.0 review follow-up evidence (as recorded at release)
@@ -208,15 +208,21 @@ built-in load driver before commit).
 The quick wins after that baseline are `/readyz`, which pings the configured
 storage on every probe and answers `503` + `EVALUATION_UNAVAILABLE` when it
 fails while `/healthz` stays a cheap liveness check (`9879c25`);
-`DATABASE_POOL_MAX`, an optional integer `>= 1` that sizes the Postgres pool
+`DATABASE_POOL_MAX`, an optional integer `1..1000` that sizes the Postgres pool
 and keeps the `pg` default when unset or invalid (`ccda627`); and a 5-second
 in-memory API-key prefix cache that is invalidated locally on create and
-revoke (`45f65de`). Flag-config reads are still uncached; ADR-007 is
-untouched.
+revoke (`45f65de`). Flag-config reads are still uncached; ADR-007 remains in
+force for them.
+
+Review round 2 then tightened this work: the pool tests now assert
+`pool.options.max` (and fail if the assignment is removed), `/readyz` has a
+2-second timeout and a test for a hanging executor, the cache has a generation
+counter against stale re-caching plus expired-entry sweeping, and the tests
+were hardened (`3a833ef`, `e2f75d5`, `8434b62`).
 
 ### After quick wins — SQLite
 
-Recorded on 2026-10-21, `DURATION=10`, `CONNECTIONS=10`:
+Recorded on 2026-10-21, `BENCH_DURATION=10`, `BENCH_CONNECTIONS=10`, one run per scenario:
 
 ```text
 BENCH_DURATION=10 npm run bench
@@ -240,7 +246,7 @@ Scenario: bulk-flags
 
 ### After quick wins — Postgres
 
-Recorded on 2026-10-21, `DURATION=10`, `CONNECTIONS=10`:
+Recorded on 2026-10-21, `BENCH_DURATION=10`, `BENCH_CONNECTIONS=10`, one run per scenario:
 
 ```text
 BENCH_DURATION=10 DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run bench
@@ -262,15 +268,17 @@ Scenario: bulk-flags
   Errors: 0, non-2xx: 0
 ```
 
-### v2.1 quick wins — test suites
+### v2.1 quick wins — final test suites
 
-All suites below were run on 2026-10-21 from commit `45f65de`.
+All suites below were run on 2026-10-21 after the review fixes
+(`3a833ef`, `e2f75d5`, `8434b62`). Benchmark numbers above are single runs and
+are directional; they are not a capacity guarantee.
 
 ```text
 npm test
-ℹ tests 118
+ℹ tests 122
 ℹ suites 0
-ℹ pass 115
+ℹ pass 119
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 3
@@ -332,6 +340,25 @@ found 0 vulnerabilities
 
 npm audit
 found 0 vulnerabilities
+```
+
+### Docker smoke — including readiness
+
+`npm run smoke` was run on the final commit. Docker Compose now healthchecks
+`/readyz`, and the smoke script checks it after the first start, the restart,
+and the down/up cycle:
+
+```text
+npm run smoke
+health: {"status":"ok"}
+readiness: {"status":"ready"}
+health: {"status":"ok"}
+readiness: {"status":"ready"}
+health: {"status":"ok"}
+readiness: {"status":"ready"}
+v2 after down/up: {"key":"smoke-v2-flag","value":true,"reason":"SPLIT","variant":"enabled"}
+OK: v2.down-up.value = true
+Smoke test passed: legacy and v2 flags survived restart and down/up.
 ```
 
 ## Historical v1 evidence
