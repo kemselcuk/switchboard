@@ -238,3 +238,19 @@ evaluation contract or the v2.0 scope boundaries. Task brief:
 Deferred until the benchmark proves a bottleneck: flag-config caching (needs an
 ADR-007 revision), SDK bulk/ETag usage, rate limiting, metrics, and the v2.1
 feature set above.
+
+## 12. v2.1 SDK track (approved)
+
+Task 083 (`docs/tasks/083-sdk-bulk-etag.md`) moves the client side to the bulk
+OFREP endpoint that the server already supports:
+
+| ID | Item | Acceptance |
+|---|---|---|
+| 12.1 | SDK bulk + per-context cache | `bulkEvaluation` option; one request for many flags; full-context cache key |
+| 12.2 | ETag conditional refresh | `If-None-Match` + `304` reuses the cache; `200` replaces it |
+| 12.3 | Polling + retries | Optional background polling (unref'ed timers, `close()`), bounded retry/backoff on network/5xx only |
+| 12.4 | Provider integration | Bulk enabled by default in `SwitchboardProvider`; `onClose()` clears timers |
+
+Direct SDK users keep the single-flag path unless they opt in; the provider
+opts in by default. No server changes, no persistent client cache, and no
+stale-if-error policy in this task.
