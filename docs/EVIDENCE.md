@@ -371,7 +371,7 @@ enables it by default. The SDK adds a bounded per-context cache, `ETag` /
 `If-None-Match` / `304` conditional refresh, opt-in polling, `close()`, and
 bounded retries; the provider keeps polling off unless `pollingIntervalMs` is
 set. The commands below were run from the repository root on 2026-10-21 after
-`npm ci`.
+`npm ci`; the workspace totals include the review fixes (`95952e8`, `1fc0544`).
 
 ```text
 npm test
@@ -406,30 +406,30 @@ npm run test:workspaces
 > @switchboard/openfeature-provider@2.0.0 test
 > tsx --test test/*.test.ts
 ...
-1..5
-# tests 5
+1..6
+# tests 6
 # suites 0
-# pass 5
+# pass 6
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 260.535458
+# duration_ms 286.210375
 ```
 
 ```text
 > @switchboard/sdk@2.0.0 test
 > tsx --test test/*.test.ts
 ...
-1..19
-# tests 19
+1..27
+# tests 27
 # suites 0
-# pass 19
+# pass 27
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 2052.318292
+# duration_ms 2550.581167
 ```
 
 ## Historical v1 evidence

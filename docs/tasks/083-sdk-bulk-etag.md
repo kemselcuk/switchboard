@@ -92,8 +92,13 @@ Landed on `main`:
   eviction coverage.
 - `1b4d26d` — OpenFeature provider enables bulk by default and implements
   `onClose()`.
+- `95952e8` — review hardening: finite option guards, `close()` aborts
+  in-flight transport, idempotent poll timer, deflaked LRU test, extra
+  retry/ETag coverage.
+- `1fc0544` — provider treats an explicit `bulkEvaluation: undefined` as the
+  bulk default; docs synced.
 
-Tests: SDK 19, provider 5 (`npm run test:workspaces`); root suite 122 tests
+Tests: SDK 27, provider 6 (`npm run test:workspaces`); root suite 122 tests
 (119 pass, 3 Postgres skips) and OFREP contract 11 pass. Real output is recorded
 in `docs/EVIDENCE.md` under "v2.1 SDK bulk + ETag".
 
