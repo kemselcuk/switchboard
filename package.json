@@ -18,6 +18,8 @@
     "test:contract": "node --test --test-reporter=spec test/contract/*.test.js",
     "migrate": "node scripts/migrate.mjs",
     "migrate:legacy": "node scripts/migrate-sqlite-to-postgres.mjs",
+    "export:config": "node scripts/export-config.mjs",
+    "import:config": "node scripts/import-config.mjs",
     "build": "npm run build --workspace @switchboard/sdk && npm run build --workspace @switchboard/openfeature-provider",
     "test:workspaces": "npm run build && npm run test --workspaces --if-present",
     "demo": "node scripts/demo.mjs",
