@@ -78,11 +78,20 @@ type TransportResult =
   | { kind: 'timeout' }
   | { kind: 'network' };
 
+const DEFAULT_TIMEOUT_MS = 1000;
 const DEFAULT_CACHE_TTL_MS = 10000;
 const DEFAULT_POLLING_INTERVAL_MS = 0;
 const DEFAULT_MAX_CACHED_CONTEXTS = 1000;
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_RETRY_BASE_DELAY_MS = 100;
+
+function finiteNumber(value: number | undefined, fallback: number): number {
+  return value !== undefined && Number.isFinite(value) ? value : fallback;
+}
+
+function finiteInteger(value: number | undefined, fallback: number): number {
+  return Math.floor(finiteNumber(value, fallback));
+}
 
 function normalizeContext(
   context: EvaluationContext | undefined,
@@ -118,12 +127,6 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(canonicalize(value));
 }
 
-function sleep(delayMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
-}
-
 function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
   const unref = (timer as unknown as { unref?: () => void }).unref;
 
@@ -144,6 +147,8 @@ export class SwitchboardClient {
   private readonly maxRetries: number;
   private readonly retryBaseDelayMs: number;
   private readonly bulkCache = new Map<string, BulkCacheEntry>();
+  private readonly inFlightControllers = new Set<AbortController>();
+  private readonly closeWaiters = new Set<() => void>();
   private closed = false;
 
   constructor(options: SwitchboardClientOptions) {
@@ -156,33 +161,48 @@ export class SwitchboardClient {
 
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.apiKey = options.apiKey;
-    this.timeoutMs = options.timeoutMs ?? 1000;
+    this.timeoutMs = Math.max(
+      0,
+      finiteNumber(options.timeoutMs, DEFAULT_TIMEOUT_MS),
+    );
     this.fetchFn = options.fetch ?? fetch;
     this.bulkEvaluation = options.bulkEvaluation ?? false;
     this.cacheTtlMs = Math.max(
       0,
-      options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS,
+      finiteNumber(options.cacheTtlMs, DEFAULT_CACHE_TTL_MS),
     );
     this.pollingIntervalMs = Math.max(
       0,
-      options.pollingIntervalMs ?? DEFAULT_POLLING_INTERVAL_MS,
+      finiteNumber(options.pollingIntervalMs, DEFAULT_POLLING_INTERVAL_MS),
     );
     this.maxCachedContexts = Math.max(
       1,
-      Math.floor(options.maxCachedContexts ?? DEFAULT_MAX_CACHED_CONTEXTS),
+      finiteInteger(options.maxCachedContexts, DEFAULT_MAX_CACHED_CONTEXTS),
     );
     this.maxRetries = Math.max(
       0,
-      Math.floor(options.maxRetries ?? DEFAULT_MAX_RETRIES),
+      finiteInteger(options.maxRetries, DEFAULT_MAX_RETRIES),
     );
     this.retryBaseDelayMs = Math.max(
       0,
-      options.retryBaseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS,
+      finiteNumber(options.retryBaseDelayMs, DEFAULT_RETRY_BASE_DELAY_MS),
     );
   }
 
   close(): void {
     this.closed = true;
+
+    for (const controller of this.inFlightControllers) {
+      controller.abort();
+    }
+
+    this.inFlightControllers.clear();
+
+    for (const wake of this.closeWaiters) {
+      wake();
+    }
+
+    this.closeWaiters.clear();
 
     for (const entry of this.bulkCache.values()) {
       if (entry.timer) {
@@ -561,7 +581,8 @@ export class SwitchboardClient {
     }
 
     if (entry.timer) {
-      clearTimeout(entry.timer);
+      // Exactly one timer per entry; refreshes must not re-arm it.
+      return;
     }
 
     const timer = setTimeout(() => {
@@ -611,8 +632,16 @@ export class SwitchboardClient {
     const attempts = this.maxRetries + 1;
 
     for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (this.closed) {
+        return { kind: 'network' };
+      }
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+      unrefTimer(timer);
+      this.inFlightControllers.add(controller);
+
       let result: TransportResult;
 
       try {
@@ -626,9 +655,16 @@ export class SwitchboardClient {
         result = { kind: 'response', response };
       } catch (error) {
         const isAbort = error instanceof Error && error.name === 'AbortError';
-        result = { kind: isAbort ? 'timeout' : 'network' };
+        result = {
+          kind: isAbort && !this.closed ? 'timeout' : 'network',
+        };
       } finally {
         clearTimeout(timer);
+        this.inFlightControllers.delete(controller);
+      }
+
+      if (this.closed) {
+        return result;
       }
 
       const retryable = result.kind === 'timeout'
@@ -646,7 +682,15 @@ export class SwitchboardClient {
       const delayMs = this.retryDelay(attempt);
 
       if (delayMs > 0) {
-        await sleep(delayMs);
+        if (this.closed) {
+          return result;
+        }
+
+        await this.waitForRetry(delayMs);
+
+        if (this.closed) {
+          return result;
+        }
       }
     }
 
@@ -662,5 +706,21 @@ export class SwitchboardClient {
     const jitter = Math.random() * this.retryBaseDelayMs * 0.5;
 
     return exponential + jitter;
+  }
+
+  private waitForRetry(delayMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const onClose = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        this.closeWaiters.delete(onClose);
+        resolve();
+      }, delayMs);
+
+      unrefTimer(timer);
+      this.closeWaiters.add(onClose);
+    });
   }
 }

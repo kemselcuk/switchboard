@@ -164,6 +164,7 @@ test('returns a network error when the server is unreachable', async () => {
     baseUrl: 'http://127.0.0.1:1',
     apiKey: 'key',
     timeoutMs: 100,
+    retryBaseDelayMs: 0,
   });
 
   try {
@@ -564,6 +565,100 @@ test('times out in single-flag mode without retries', async (t) => {
   assert.equal(requestCount, 1);
 });
 
+test('close aborts an in-flight request and settles quickly', async (t) => {
+  let requestStarted = false;
+  const server = await startServer((_request, _response) => {
+    requestStarted = true;
+    // Never respond; the client must abort the request on close().
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    timeoutMs: 5000,
+  });
+  t.after(() => client.close());
+
+  const startedAt = Date.now();
+  const pending = client.getBooleanDetails('flag', true);
+
+  await waitFor(() => requestStarted);
+  client.close();
+
+  const details = await pending;
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(details.value, true);
+  assert.equal(details.reason, 'ERROR');
+  assert.equal(details.errorCode, 'NETWORK_ERROR');
+  assert.ok(elapsedMs < 1000, `request settled after ${elapsedMs}ms`);
+});
+
+test('close interrupts the retry backoff sleep', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+      response.writeHead(503);
+      response.end();
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    maxRetries: 2,
+    retryBaseDelayMs: 2000,
+  });
+  t.after(() => client.close());
+
+  const startedAt = Date.now();
+  const pending = client.getBooleanDetails('flag', true);
+
+  await waitFor(() => requestCount >= 1);
+  await sleep(50);
+  client.close();
+
+  const details = await pending;
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(details.value, true);
+  assert.equal(details.reason, 'ERROR');
+  assert.ok(details.errorCode);
+  assert.equal(requestCount, 1);
+  assert.ok(elapsedMs < 1000, `request settled after ${elapsedMs}ms`);
+});
+
+test('retries single-flag 5xx responses exactly maxRetries + 1 times', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+      response.writeHead(503);
+      response.end();
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    maxRetries: 2,
+    retryBaseDelayMs: 0,
+  });
+  t.after(() => client.close());
+
+  const details = await client.getBooleanDetails('flag', true);
+
+  assert.equal(details.value, true);
+  assert.equal(details.errorCode, 'EVALUATION_UNAVAILABLE');
+  assert.equal(requestCount, 3);
+});
+
 test('close stops background polling', async (t) => {
   let requestCount = 0;
   const server = await startServer((request, response) => {
@@ -607,6 +702,134 @@ test('close stops background polling', async (t) => {
   await sleep(100);
 
   assert.equal(requestCount, afterClose);
+});
+
+test('non-finite polling intervals do not schedule a poll loop', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        etag: '"no-poll-v1"',
+      });
+      response.end(bulkResponse([
+        { key: 'flag', value: true, reason: 'SPLIT' },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const clients = [Number.NaN, Number.POSITIVE_INFINITY].map(
+    (pollingIntervalMs) => new SwitchboardClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'key',
+      bulkEvaluation: true,
+      cacheTtlMs: 60000,
+      pollingIntervalMs,
+    }),
+  );
+  t.after(() => {
+    for (const client of clients) {
+      client.close();
+    }
+  });
+
+  for (const client of clients) {
+    const details = await client.getBooleanDetails(
+      'flag',
+      false,
+      { targetingKey: 'user-1' },
+    );
+
+    assert.equal(details.value, true);
+  }
+
+  await sleep(100);
+
+  assert.equal(requestCount, 2);
+});
+
+test('non-finite maxRetries still performs one request', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        key: 'flag',
+        value: true,
+        reason: 'SPLIT',
+      }));
+    });
+  });
+  t.after(server.close);
+
+  const clients = [Number.NaN, Number.POSITIVE_INFINITY].map(
+    (maxRetries) => new SwitchboardClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'key',
+      maxRetries,
+      retryBaseDelayMs: 0,
+    }),
+  );
+  t.after(() => {
+    for (const client of clients) {
+      client.close();
+    }
+  });
+
+  for (const client of clients) {
+    const details = await client.getBooleanDetails('flag', false);
+
+    assert.equal(details.value, true);
+  }
+
+  assert.equal(requestCount, 2);
+});
+
+test('non-finite cacheTtlMs and timeoutMs use their defaults', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+      response.writeHead(200, {
+        'content-type': 'application/json',
+        etag: '"finite-options-v1"',
+      });
+      response.end(bulkResponse([
+        { key: 'flag', value: true, reason: 'SPLIT' },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: Number.NaN,
+    timeoutMs: Number.POSITIVE_INFINITY,
+  });
+  t.after(() => client.close());
+
+  const first = await client.getBooleanDetails(
+    'flag',
+    false,
+    { targetingKey: 'user-1' },
+  );
+  const second = await client.getBooleanDetails(
+    'flag',
+    false,
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(first.value, true);
+  assert.equal(second.value, true);
+  assert.equal(requestCount, 1);
 });
 
 test('refreshes the cached flag set after cacheTtlMs expires', async (t) => {
@@ -711,6 +934,106 @@ test('cacheTtlMs 0 fetches on every evaluation', async (t) => {
   assert.equal(requestCount, 2);
 });
 
+test('a 200 response without ETag clears the cached validator', async (t) => {
+  let requestCount = 0;
+  const ifNoneMatchHeaders: Array<string | undefined> = [];
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+
+      const ifNoneMatch = request.headers['if-none-match'];
+
+      ifNoneMatchHeaders.push(
+        typeof ifNoneMatch === 'string' ? ifNoneMatch : undefined,
+      );
+
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+      };
+
+      if (requestCount !== 2) {
+        headers.etag = `"etag-${requestCount}"`;
+      }
+
+      response.writeHead(200, headers);
+      response.end(bulkResponse([
+        { key: 'alpha', value: true, reason: 'SPLIT' },
+      ]));
+    });
+  });
+  t.after(server.close);
+
+  const client = new SwitchboardClient({
+    baseUrl: server.baseUrl,
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 30,
+  });
+  t.after(() => client.close());
+
+  await client.getBooleanDetails('alpha', false, { targetingKey: 'user-1' });
+
+  await sleep(60);
+  await client.getBooleanDetails('alpha', false, { targetingKey: 'user-1' });
+
+  await sleep(60);
+  const details = await client.getBooleanDetails(
+    'alpha',
+    false,
+    { targetingKey: 'user-1' },
+  );
+
+  assert.equal(details.value, true);
+  assert.deepEqual(ifNoneMatchHeaders, [undefined, '"etag-1"', undefined]);
+});
+
+test('non-finite maxCachedContexts keeps the cache bounded', async () => {
+  let requestCount = 0;
+  const client = new SwitchboardClient({
+    baseUrl: 'http://127.0.0.1:1',
+    apiKey: 'key',
+    bulkEvaluation: true,
+    cacheTtlMs: 60000,
+    maxCachedContexts: Number.NaN,
+    fetch: async () => {
+      requestCount += 1;
+
+      return new Response(
+        bulkResponse([{ key: 'flag', value: true, reason: 'SPLIT' }]),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+            etag: '"bounded-v1"',
+          },
+        },
+      );
+    },
+  });
+
+  try {
+    for (let index = 0; index < 1001; index += 1) {
+      const details = await client.getBooleanDetails(
+        'flag',
+        false,
+        { targetingKey: `user-${index}` },
+      );
+
+      assert.equal(details.value, true);
+    }
+
+    const cacheSize = (client as unknown as {
+      bulkCache: Map<string, unknown>;
+    }).bulkCache.size;
+
+    assert.equal(requestCount, 1001);
+    assert.equal(cacheSize, 1000);
+  } finally {
+    client.close();
+  }
+});
+
 test('evicts the least recently used context at maxCachedContexts', async (t) => {
   const contexts: string[] = [];
   const server = await startServer((request, response) => {
@@ -780,7 +1103,6 @@ test('evicts the least recently used context at maxCachedContexts', async (t) =>
 
 test('eviction clears the polling timer of the displaced context', async (t) => {
   const polledContexts: string[] = [];
-  let requestCount = 0;
   const server = await startServer((request, response) => {
     let body = '';
 
@@ -788,7 +1110,6 @@ test('eviction clears the polling timer of the displaced context', async (t) => 
       body += chunk;
     });
     request.on('end', () => {
-      requestCount += 1;
       const payload = JSON.parse(body) as {
         context: { targetingKey: string };
       };
@@ -811,22 +1132,44 @@ test('eviction clears the polling timer of the displaced context', async (t) => 
     bulkEvaluation: true,
     cacheTtlMs: 60000,
     maxCachedContexts: 1,
-    pollingIntervalMs: 30,
+    pollingIntervalMs: 150,
   });
   t.after(() => client.close());
 
   await client.getBooleanDetails('flag', false, { targetingKey: 'a' });
   await client.getBooleanDetails('flag', false, { targetingKey: 'b' });
 
-  await waitFor(() => requestCount >= 4);
+  const aCountAfterEviction = polledContexts.filter(
+    (context) => context === 'a',
+  ).length;
+
+  assert.equal(aCountAfterEviction, 1);
+
+  await waitFor(
+    () => polledContexts.filter((context) => context === 'b').length >= 2,
+    3000,
+  );
+
+  const bCount = polledContexts.filter(
+    (context) => context === 'b',
+  ).length;
+
+  await sleep(400);
 
   assert.equal(
     polledContexts.filter((context) => context === 'a').length,
-    1,
+    aCountAfterEviction,
   );
+  assert.ok(bCount >= 2);
   assert.ok(
-    polledContexts.filter((context) => context === 'b').length >= 3,
+    polledContexts.filter((context) => context === 'b').length > bCount,
   );
+
+  const cacheSize = (client as unknown as {
+    bulkCache: Map<string, unknown>;
+  }).bulkCache.size;
+
+  assert.equal(cacheSize, 1);
 });
 
 test('background polling failures leave the cached flags untouched', async (t) => {
