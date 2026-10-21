@@ -6,6 +6,7 @@ import {
   mapFlag,
   notFound,
 } from './common.js';
+import { nextLegacyId } from './legacy-ids.js';
 
 const FLAG_SELECT = [
   'flags.id as flag_id',
@@ -23,16 +24,6 @@ const FLAG_SELECT = [
 function isLegacyIdConflict(error) {
   return error?.constraint === 'flags_project_legacy_id_unique'
     || /legacy_id/.test(error?.message ?? '');
-}
-
-async function nextLegacyId(trx, projectId) {
-  const row = await trx
-    .selectFrom('flags')
-    .select((builder) => builder.fn.max('legacy_id').as('max_legacy_id'))
-    .where('project_id', '=', projectId)
-    .executeTakeFirst();
-
-  return Number(row?.max_legacy_id ?? 0) + 1;
 }
 
 function flagQuery(db, projectId, environmentId) {
@@ -228,11 +219,26 @@ export function createFlagRepository(db) {
     return getFlag(projectId, environmentId, key);
   }
 
+  async function deleteFlag(projectId, key) {
+    const result = await db
+      .deleteFrom('flags')
+      .where('project_id', '=', projectId)
+      .where('key', '=', key)
+      .executeTakeFirst();
+
+    if (Number(result.numDeletedRows ?? 0) === 0) {
+      throw notFound('FLAG_NOT_FOUND', 'Flag not found');
+    }
+
+    return { key, deleted: true };
+  }
+
   return {
     createFlagInEnvironment,
     listFlags,
     findFlag,
     getFlag,
     updateFlag,
+    deleteFlag,
   };
 }

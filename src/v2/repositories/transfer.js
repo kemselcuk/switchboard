@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError, ERROR_CODES } from '../../errors.js';
 import { V2_KEY_PATTERN } from '../schemas.js';
+import { nextLegacyId } from './legacy-ids.js';
 
 export const EXPORT_FORMAT = 'switchboard-v2-export';
 export const EXPORT_VERSION = 1;
@@ -139,16 +140,6 @@ function validateExport(data) {
       }
     }
   }
-}
-
-async function nextLegacyId(trx, projectId) {
-  const row = await trx
-    .selectFrom('flags')
-    .select((builder) => builder.fn.max('legacy_id').as('max_legacy_id'))
-    .where('project_id', '=', projectId)
-    .executeTakeFirst();
-
-  return Number(row?.max_legacy_id ?? 0) + 1;
 }
 
 function toPercent(basisPoints) {

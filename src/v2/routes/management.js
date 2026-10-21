@@ -11,6 +11,7 @@ import {
   environmentParams,
   flagParams,
   projectBody,
+  projectFlagParams,
   projectParams,
   updateFlagBody,
 } from '../schemas.js';
@@ -130,6 +131,16 @@ export async function managementRoutes(app, { db, adminToken }) {
       const list = await flags.listFlags(project.id, environment.id);
 
       return { flags: list.map(toFlagResponse) };
+    },
+  );
+
+  app.delete(
+    '/api/v1/projects/:project/flags/:key',
+    { schema: { params: projectFlagParams } },
+    async (request) => {
+      const project = await projects.getProjectByKey(request.params.project);
+
+      return flags.deleteFlag(project.id, request.params.key);
     },
   );
 

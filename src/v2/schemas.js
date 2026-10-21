@@ -107,6 +107,15 @@ export const environmentParams = {
   },
 };
 
+export const projectFlagParams = {
+  type: 'object',
+  required: ['project', 'key'],
+  properties: {
+    project: keyProperty,
+    key: keyProperty,
+  },
+};
+
 export const flagParams = {
   type: 'object',
   required: ['project', 'env', 'key'],

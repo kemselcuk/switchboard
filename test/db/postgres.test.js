@@ -341,3 +341,89 @@ test('Postgres exports and re-imports configuration', { skip }, async (t) => {
   assert.equal(again.configsCreated, 0);
   assert.equal(again.configsUpdated, 0);
 });
+
+
+test('Postgres flag deletion removes every environment config', { skip }, async (t) => {
+  const v2 = await initializeV2Database({ databaseUrl: DATABASE_URL });
+  const app = buildApp({ v2, adminToken: 'postgres-test-token' });
+  const auth = { authorization: 'Bearer postgres-test-token' };
+  const suffix = randomUUID().slice(0, 8);
+  const projectKey = `pgdelete-${suffix}`;
+
+  t.after(() => app.close());
+
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects',
+    headers: auth,
+    payload: { key: projectKey, name: 'Delete test' },
+  });
+
+  for (const environment of ['production', 'staging']) {
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectKey}/environments`,
+      headers: auth,
+      payload: { key: environment, name: environment },
+    });
+    const flag = await app.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectKey}/environments/${environment}/flags`,
+      headers: auth,
+      payload: { key: 'doomed', enabled: true, rolloutPercentage: 50 },
+    });
+
+    assert.equal(flag.statusCode, 201);
+  }
+
+  const deleted = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/projects/${projectKey}/flags/doomed`,
+    headers: auth,
+  });
+
+  assert.equal(deleted.statusCode, 200);
+  assert.deepEqual(deleted.json(), { key: 'doomed', deleted: true });
+
+  for (const environment of ['production', 'staging']) {
+    const flag = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${projectKey}/environments/${environment}/flags/doomed`,
+      headers: auth,
+    });
+
+    assert.equal(flag.statusCode, 404);
+  }
+
+  const project = await v2.db
+    .selectFrom('projects')
+    .select('id')
+    .where('key', '=', projectKey)
+    .executeTakeFirst();
+  const configs = await v2.db
+    .selectFrom('flag_configs')
+    .innerJoin('flags', 'flags.id', 'flag_configs.flag_id')
+    .select('flag_configs.id')
+    .where('flags.project_id', '=', project.id)
+    .execute();
+
+  assert.equal(configs.length, 0);
+
+  const recreated = await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${projectKey}/environments/production/flags`,
+    headers: auth,
+    payload: { key: 'doomed', enabled: true, rolloutPercentage: 10 },
+  });
+
+  assert.equal(recreated.statusCode, 201);
+
+  const flagRow = await v2.db
+    .selectFrom('flags')
+    .select('legacy_id')
+    .where('project_id', '=', project.id)
+    .where('key', '=', 'doomed')
+    .executeTakeFirst();
+
+  assert.equal(flagRow.legacy_id, 2);
+});

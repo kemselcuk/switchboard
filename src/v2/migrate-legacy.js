@@ -2,34 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import Database from 'better-sqlite3';
 
-async function isLegacyIdTaken(trx, projectId, legacyId) {
-  const row = await trx
-    .selectFrom('flags')
-    .select('id')
-    .where('project_id', '=', projectId)
-    .where('legacy_id', '=', legacyId)
-    .executeTakeFirst();
-
-  return Boolean(row);
-}
-
-async function allocateLegacyId(trx, projectId, preferred) {
-  if (
-    Number.isInteger(preferred)
-    && preferred > 0
-    && !(await isLegacyIdTaken(trx, projectId, preferred))
-  ) {
-    return preferred;
-  }
-
-  const row = await trx
-    .selectFrom('flags')
-    .select((builder) => builder.fn.max('legacy_id').as('max_legacy_id'))
-    .where('project_id', '=', projectId)
-    .executeTakeFirst();
-
-  return Number(row?.max_legacy_id ?? 0) + 1;
-}
+import { reserveLegacyId } from './repositories/legacy-ids.js';
 
 export function readLegacyFlags(legacyDbPath) {
   const source = new Database(legacyDbPath, {
@@ -88,7 +61,7 @@ export async function migrateLegacyFlags({
           await trx
             .updateTable('flags')
             .set({
-              legacy_id: await allocateLegacyId(trx, projectId, Number(flag.id)),
+              legacy_id: await reserveLegacyId(trx, projectId, Number(flag.id)),
             })
             .where('id', '=', existingFlag.id)
             .execute();
@@ -129,7 +102,7 @@ export async function migrateLegacyFlags({
         .insertInto('flags')
         .values({
           id: flagId,
-          legacy_id: await allocateLegacyId(trx, projectId, Number(flag.id)),
+          legacy_id: await reserveLegacyId(trx, projectId, Number(flag.id)),
           project_id: projectId,
           key: flag.key,
           type: 'boolean',

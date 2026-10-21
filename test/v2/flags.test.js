@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   AUTHORIZATION,
+  createApiKey,
   createEnvironment,
   createFlag,
   createProject,
@@ -190,4 +191,130 @@ test('validates rollout precision and unknown flags', async (t) => {
   assert.equal(tooPrecise.statusCode, 400);
   assert.equal(missing.statusCode, 404);
   assert.equal(missing.json().error.code, 'FLAG_NOT_FOUND');
+});
+
+
+test('deletes a flag and all environment configs without touching other projects', async (t) => {
+  const { app, v2 } = await createV2App(t);
+  await createProject(app, 'demo', 'Demo');
+  await createEnvironment(app, 'demo', 'production');
+  await createEnvironment(app, 'demo', 'staging');
+  await createFlag(app, 'demo', 'production', { key: 'new-checkout' });
+  await createFlag(app, 'demo', 'staging', { key: 'new-checkout' });
+  const key = await createApiKey(app, 'demo', 'production');
+
+  await createProject(app, 'other', 'Other');
+  await createEnvironment(app, 'other', 'production');
+  await createFlag(app, 'other', 'production', { key: 'new-checkout' });
+
+  const before = await v2.db
+    .selectFrom('flags')
+    .innerJoin('projects', 'projects.id', 'flags.project_id')
+    .select(['flags.id', 'flags.legacy_id'])
+    .where('projects.key', '=', 'demo')
+    .where('flags.key', '=', 'new-checkout')
+    .executeTakeFirst();
+
+  const deleted = await app.inject({
+    method: 'DELETE',
+    url: '/api/v1/projects/demo/flags/new-checkout',
+    headers: AUTHORIZATION,
+  });
+
+  assert.equal(deleted.statusCode, 200);
+  assert.deepEqual(deleted.json(), { key: 'new-checkout', deleted: true });
+
+  for (const environment of ['production', 'staging']) {
+    const flag = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/demo/environments/${environment}/flags/new-checkout`,
+      headers: AUTHORIZATION,
+    });
+    const list = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/demo/environments/${environment}/flags`,
+      headers: AUTHORIZATION,
+    });
+
+    assert.equal(flag.statusCode, 404);
+    assert.equal(list.json().flags.length, 0);
+  }
+
+  const other = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/other/environments/production/flags/new-checkout',
+    headers: AUTHORIZATION,
+  });
+  assert.equal(other.statusCode, 200);
+
+  const evaluation = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/new-checkout',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+  assert.equal(evaluation.statusCode, 404);
+  assert.equal(evaluation.json().errorCode, 'FLAG_NOT_FOUND');
+
+  const remainingConfigs = await v2.db
+    .selectFrom('flag_configs')
+    .innerJoin('flags', 'flags.id', 'flag_configs.flag_id')
+    .innerJoin('projects', 'projects.id', 'flags.project_id')
+    .select('flag_configs.id')
+    .where('projects.key', '=', 'demo')
+    .execute();
+  assert.equal(remainingConfigs.length, 0);
+
+  const recreated = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects/demo/environments/production/flags',
+    headers: AUTHORIZATION,
+    payload: { key: 'new-checkout', enabled: true, rolloutPercentage: 10 },
+  });
+  assert.equal(recreated.statusCode, 201);
+
+  const after = await v2.db
+    .selectFrom('flags')
+    .innerJoin('projects', 'projects.id', 'flags.project_id')
+    .select(['flags.id', 'flags.legacy_id'])
+    .where('projects.key', '=', 'demo')
+    .where('flags.key', '=', 'new-checkout')
+    .executeTakeFirst();
+
+  assert.notEqual(after.id, before.id);
+  assert.equal(after.legacy_id, before.legacy_id + 1);
+});
+
+test('validates flag deletion requests', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app, 'demo');
+  await createEnvironment(app, 'demo', 'production');
+  await createFlag(app, 'demo', 'production');
+
+  const unknownProject = await app.inject({
+    method: 'DELETE',
+    url: '/api/v1/projects/missing/flags/new-checkout',
+    headers: AUTHORIZATION,
+  });
+  const unknownFlag = await app.inject({
+    method: 'DELETE',
+    url: '/api/v1/projects/demo/flags/missing',
+    headers: AUTHORIZATION,
+  });
+  const unauthenticated = await app.inject({
+    method: 'DELETE',
+    url: '/api/v1/projects/demo/flags/new-checkout',
+  });
+  const invalidKey = await app.inject({
+    method: 'DELETE',
+    url: '/api/v1/projects/demo/flags/BAD',
+    headers: AUTHORIZATION,
+  });
+
+  assert.equal(unknownProject.statusCode, 404);
+  assert.equal(unknownProject.json().error.code, 'PROJECT_NOT_FOUND');
+  assert.equal(unknownFlag.statusCode, 404);
+  assert.equal(unknownFlag.json().error.code, 'FLAG_NOT_FOUND');
+  assert.equal(unauthenticated.statusCode, 401);
+  assert.equal(invalidKey.statusCode, 400);
 });
