@@ -202,6 +202,19 @@ test('deletes a flag and all environment configs without touching other projects
   await createFlag(app, 'demo', 'production', { key: 'new-checkout' });
   await createFlag(app, 'demo', 'staging', { key: 'new-checkout' });
   const key = await createApiKey(app, 'demo', 'production');
+  const apiKeysBefore = await v2.db
+    .selectFrom('api_keys')
+    .select([
+      'id',
+      'environment_id',
+      'type',
+      'name',
+      'prefix',
+      'hash',
+      'created_at',
+      'revoked_at',
+    ])
+    .execute();
 
   await createProject(app, 'other', 'Other');
   await createEnvironment(app, 'other', 'production');
@@ -256,12 +269,25 @@ test('deletes a flag and all environment configs without touching other projects
   assert.equal(evaluation.statusCode, 404);
   assert.equal(evaluation.json().errorCode, 'FLAG_NOT_FOUND');
 
+  const apiKeysAfter = await v2.db
+    .selectFrom('api_keys')
+    .select([
+      'id',
+      'environment_id',
+      'type',
+      'name',
+      'prefix',
+      'hash',
+      'created_at',
+      'revoked_at',
+    ])
+    .execute();
+  assert.deepEqual(apiKeysAfter, apiKeysBefore);
+
   const remainingConfigs = await v2.db
     .selectFrom('flag_configs')
-    .innerJoin('flags', 'flags.id', 'flag_configs.flag_id')
-    .innerJoin('projects', 'projects.id', 'flags.project_id')
-    .select('flag_configs.id')
-    .where('projects.key', '=', 'demo')
+    .select('id')
+    .where('flag_id', '=', before.id)
     .execute();
   assert.equal(remainingConfigs.length, 0);
 

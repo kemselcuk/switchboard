@@ -400,11 +400,15 @@ test('Postgres flag deletion removes every environment config', { skip }, async 
     .select('id')
     .where('key', '=', projectKey)
     .executeTakeFirst();
+  const environments = await v2.db
+    .selectFrom('environments')
+    .select('id')
+    .where('project_id', '=', project.id)
+    .execute();
   const configs = await v2.db
     .selectFrom('flag_configs')
-    .innerJoin('flags', 'flags.id', 'flag_configs.flag_id')
-    .select('flag_configs.id')
-    .where('flags.project_id', '=', project.id)
+    .select('id')
+    .where('environment_id', 'in', environments.map((row) => row.id))
     .execute();
 
   assert.equal(configs.length, 0);

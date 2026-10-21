@@ -397,11 +397,11 @@ DATABASE_URL=postgres://... npm run bench
 ```
 
 Postgres mode writes the benchmark project, environment, flag, and API key to
-that database and does not delete them (v2.0 has no project/flag deletion);
-point it at a dedicated benchmark database. Numbers are from one run and are
-directional, not a capacity guarantee.
+that database and does not clean them up (flag deletion exists, project
+deletion does not); point it at a dedicated benchmark database. Numbers are
+from one run and are directional, not a capacity guarantee.
 
-Current local suite: 144 tests, 139 pass, 5 skipped when `DATABASE_URL` is not
+Current local suite: 146 tests, 141 pass, 5 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)

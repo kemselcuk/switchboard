@@ -67,7 +67,14 @@ export async function reserveLegacyId(trx, projectId, preferred) {
   if (preferred >= sequence.next_legacy_id) {
     await trx
       .updateTable('flag_legacy_sequences')
-      .set({ next_legacy_id: preferred + 1 })
+      .set((builder) => ({
+        next_legacy_id: builder
+          .case()
+          .when('next_legacy_id', '<', preferred + 1)
+          .then(preferred + 1)
+          .else(builder.ref('next_legacy_id'))
+          .end(),
+      }))
       .where('project_id', '=', projectId)
       .execute();
   }

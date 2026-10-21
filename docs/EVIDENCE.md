@@ -557,7 +557,9 @@ npm test
 
 Task 086 adds project-scoped flag deletion. Deleting removes every environment
 config via the FK cascade, leaves API keys intact, and never reuses numeric
-legacy IDs (per-project sequence).
+legacy IDs (per-project sequence). Cascade assertions query `flag_configs`
+directly (not through a join that could hide orphans); a separate test covers
+sequence monotonicity after reserves and deletions.
 
 ```text
 node --test test/v2/flags.test.js
@@ -589,9 +591,9 @@ DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm r
 
 ```text
 npm test
-ℹ tests 144
+ℹ tests 146
 ℹ suites 0
-ℹ pass 139
+ℹ pass 141
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 5
