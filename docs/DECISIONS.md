@@ -338,3 +338,39 @@ the management contract. OFREP remains the only OpenAPI-driven contract.
 - A management OpenAPI document can be generated or written in v2.1 when
   project-scoped admin keys and more flag types exist.
 - This deferral is explicit, not an accidental omission.
+
+## ADR-022 — Readiness probe separated from liveness
+
+**Context:** Container orchestrators and Compose need to know whether storage is
+usable, not merely whether the process is running. `/healthz` must stay cheap and
+independent so a storage problem does not cause the process to be restarted.
+
+**Decision:** `GET /readyz` performs a storage ping (`select 1` through Kysely in
+v2, `SELECT 1` on `better-sqlite3` in v1). On failure it returns `503` with the
+shared `{ error: { code: 'EVALUATION_UNAVAILABLE', message: 'Flag storage is unavailable' } }`
+envelope and never leaks internals. `/healthz` remains `{ status: 'ok' }` with no
+I/O. The endpoint is public like `/healthz`.
+
+**Consequences:**
+- Readiness reflects storage, not just process liveness.
+- A failing probe does not change evaluation semantics.
+- No auth is added because the probe exposes no tenant data.
+
+## ADR-023 — Short-TTL API-key prefix cache
+
+**Context:** Every OFREP evaluation looked up the API key prefix in the database,
+adding one query per request on top of the flag/config read.
+
+**Decision:** Cache found api-key lookup rows in memory per Kysely db instance,
+using a module-level `WeakMap` so the auth hook and management routes share
+entries. The TTL is 5000 ms and only positive entries are cached; unknown
+prefixes are not cached. The whole cache is invalidated on create and revoke, and
+cached `last_used_at` is refreshed when the throttled touch writes. Flag/config
+evaluation reads stay uncached; ADR-007 is unchanged.
+
+**Consequences:**
+- One fewer DB query per evaluation.
+- Revocation is immediate in-process, but multi-instance deployments may serve a
+  revoked key for up to 5 seconds.
+- The cache is process-local and disappears on restart.
+- Newly created keys are never shadowed by a negative cache.
