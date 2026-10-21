@@ -435,12 +435,20 @@ Copying API keys would move secrets between instances and is not acceptable.
 and legacy IDs are not exported. Import is additive and idempotent inside one
 transaction: it creates missing projects/environments/flags, updates flag
 descriptions and configs, and never deletes or renames. A `--dry-run` performs
-validation and counts without persisting. No API-key, hash, prefix, or secret
-field is exported or imported. This is a CLI, not an HTTP endpoint.
+validation and counts, then rolls back the configuration writes; on a fresh path
+the schema and default project may still be bootstrapped. No API-key, hash,
+prefix, or secret field is exported or imported. This is a CLI, not an HTTP
+endpoint.
 
 **Consequences:**
-- Backups and CI seeds are portable between SQLite and Postgres instances.
+- Backups and CI seeds are portable between SQLite and Postgres instances;
+  both dialects are covered by tests.
 - API keys must be created separately on the target instance.
 - Imports do not remove definitions that are absent from the file.
 - The format is versioned; incompatible versions are rejected before any write.
 - The CLI reads `DATABASE_URL` or `V2_DB_PATH`, matching the server.
+- Export runs per-environment read queries without a repeatable-read snapshot;
+  a backup taken during concurrent writes may mix slightly different moments.
+- Import is not safe for two concurrent imports of the same new flag: the
+  per-project legacy-id allocation can race (the import fails rather than
+  corrupting data).

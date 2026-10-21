@@ -10,6 +10,10 @@ import { openDatabase } from '../../src/db.js';
 import { createRepository } from '../../src/flags/repository.js';
 import { initializeV2Database } from '../../src/v2/db.js';
 import { migrateLegacyFlags } from '../../src/v2/migrate-legacy.js';
+import {
+  exportConfiguration,
+  importConfiguration,
+} from '../../src/v2/repositories/transfer.js';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const skip = DATABASE_URL ? false : 'DATABASE_URL is not set';
@@ -253,4 +257,87 @@ test('Postgres covers migration, legacy routes, isolation and revocation', { ski
     .updateTable('flag_configs')
     .set({ rollout_basis_points: 100001 })
     .execute());
+});
+
+
+test('Postgres exports and re-imports configuration', { skip }, async (t) => {
+  const v2 = await initializeV2Database({ databaseUrl: DATABASE_URL });
+  const app = buildApp({ v2, adminToken: 'postgres-test-token' });
+  const auth = { authorization: 'Bearer postgres-test-token' };
+  const suffix = randomUUID().slice(0, 8);
+  const sourceKey = `pgtransfer-src-${suffix}`;
+  const targetKey = `pgtransfer-dst-${suffix}`;
+
+  t.after(() => app.close());
+
+  const project = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects',
+    headers: auth,
+    payload: { key: sourceKey, name: 'Transfer source' },
+  });
+  assert.equal(project.statusCode, 201);
+
+  await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${sourceKey}/environments`,
+    headers: auth,
+    payload: { key: 'production', name: 'Production' },
+  });
+  const flag = await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${sourceKey}/environments/production/flags`,
+    headers: auth,
+    payload: {
+      key: 'transfer-flag',
+      description: 'Postgres transfer',
+      enabled: true,
+      rolloutPercentage: 37.125,
+    },
+  });
+  assert.equal(flag.statusCode, 201);
+
+  const exported = await exportConfiguration(v2.db);
+  const serialized = JSON.stringify(exported);
+  assert.equal(serialized.includes('api_keys'), false);
+  assert.equal(serialized.includes('sb_srv_'), false);
+
+  const sourceProject = exported.projects.find(
+    (entry) => entry.key === sourceKey,
+  );
+  assert.ok(sourceProject);
+
+  const targetProject = {
+    ...sourceProject,
+    key: targetKey,
+    name: 'Transfer target',
+  };
+  const payload = {
+    format: exported.format,
+    version: exported.version,
+    projects: [targetProject],
+  };
+  const summary = await importConfiguration(v2.db, payload);
+
+  assert.equal(summary.projectsCreated, 1);
+  assert.equal(summary.environmentsCreated, 1);
+  assert.equal(summary.flagsCreated, 1);
+  assert.equal(summary.configsCreated, 1);
+
+  const importedFlag = await app.inject({
+    method: 'GET',
+    url: `/api/v1/projects/${targetKey}/environments/production/flags/transfer-flag`,
+    headers: auth,
+  });
+
+  assert.equal(importedFlag.statusCode, 200);
+  assert.equal(importedFlag.json().enabled, true);
+  assert.equal(importedFlag.json().rolloutPercentage, 37.125);
+  assert.equal(importedFlag.json().description, 'Postgres transfer');
+
+  const again = await importConfiguration(v2.db, payload);
+  assert.equal(again.projectsCreated, 0);
+  assert.equal(again.flagsCreated, 0);
+  assert.equal(again.configsCreated, 0);
+  assert.equal(again.configsUpdated, 0);
 });

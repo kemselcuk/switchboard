@@ -52,14 +52,15 @@ async function seedSource(t) {
     enabled: false,
     rolloutPercentage: 12.5,
   });
-  await createApiKey(app, 'demo', 'production', 'source key');
+  const sourceKey = await createApiKey(app, 'demo', 'production', 'source key');
 
-  return { app, v2 };
+  return { app, v2, sourceKey };
 }
 
-function invalidExport() {
+function invalidExport(message) {
   return (error) => error?.statusCode === 400
-    && error?.code === 'INVALID_EXPORT';
+    && error?.code === 'INVALID_EXPORT'
+    && String(error.message).includes(message);
 }
 
 test('exports projects, environments, flags and configs without secrets', async (t) => {
@@ -94,10 +95,14 @@ test('exports projects, environments, flags and configs without secrets', async 
   assert.equal(serialized.includes('prefix'), false);
   assert.equal(serialized.includes('hash'), false);
   assert.equal(serialized.includes('"id"'), false);
+  assert.equal(serialized.includes('legacy_id'), false);
+  assert.equal(serialized.includes('flag_id'), false);
+  assert.equal(serialized.includes('project_id'), false);
+  assert.equal(serialized.includes('environment_id'), false);
 });
 
 test('round-trips into a fresh database with new IDs and matching values', async (t) => {
-  const { v2: source } = await seedSource(t);
+  const { app: sourceApp, v2: source, sourceKey } = await seedSource(t);
   const data = await exportConfiguration(source.db);
   const sourceFlag = await source.db
     .selectFrom('flags')
@@ -127,9 +132,53 @@ test('round-trips into a fresh database with new IDs and matching values', async
   assert.equal(production.statusCode, 200);
   assert.equal(production.json().enabled, true);
   assert.equal(production.json().rolloutPercentage, 40);
+  assert.equal(production.json().description, 'New checkout');
   assert.equal(staging.statusCode, 200);
   assert.equal(staging.json().enabled, false);
   assert.equal(staging.json().rolloutPercentage, 5);
+
+  const projects = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects',
+    headers: AUTHORIZATION,
+  });
+  const environments = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/demo/environments',
+    headers: AUTHORIZATION,
+  });
+
+  assert.equal(
+    projects.json().projects.find((entry) => entry.key === 'demo').name,
+    'Demo',
+  );
+  assert.deepEqual(
+    environments.json().environments
+      .map((entry) => [entry.key, entry.name])
+      .sort(([left], [right]) => left.localeCompare(right)),
+    [['production', 'Production'], ['staging', 'Staging']],
+  );
+
+  const targetKey = await createApiKey(app, 'demo', 'production', 'target key');
+
+  for (const userId of ['user-1', 'user-2', 'user-3', 'user-4', 'user-5']) {
+    const sourceEvaluation = await sourceApp.inject({
+      method: 'POST',
+      url: '/ofrep/v1/evaluate/flags/new-checkout',
+      headers: { 'x-api-key': sourceKey.key },
+      payload: { context: { targetingKey: userId } },
+    });
+    const targetEvaluation = await app.inject({
+      method: 'POST',
+      url: '/ofrep/v1/evaluate/flags/new-checkout',
+      headers: { 'x-api-key': targetKey.key },
+      payload: { context: { targetingKey: userId } },
+    });
+
+    assert.equal(targetEvaluation.statusCode, 200);
+    assert.equal(targetEvaluation.json().value, sourceEvaluation.json().value);
+    assert.equal(targetEvaluation.json().reason, sourceEvaluation.json().reason);
+  }
 
   const targetFlag = await v2.db
     .selectFrom('flags')
@@ -158,7 +207,7 @@ test('is idempotent on a second import', async (t) => {
   assert.equal(second.totalConfigs, 3);
 });
 
-test('applies changed configs from a new export', async (t) => {
+test('applies changed descriptions and configs from a new export', async (t) => {
   const { app, v2: source } = await seedSource(t);
   const initial = await exportConfiguration(source.db);
 
@@ -166,7 +215,11 @@ test('applies changed configs from a new export', async (t) => {
     method: 'PATCH',
     url: '/api/v1/projects/demo/environments/production/flags/new-checkout',
     headers: AUTHORIZATION,
-    payload: { enabled: false, rolloutPercentage: 12.5 },
+    payload: {
+      description: 'Changed description',
+      enabled: false,
+      rolloutPercentage: 12.5,
+    },
   });
   const changed = await exportConfiguration(source.db);
   const { app: targetApp, v2 } = await createTarget(t);
@@ -175,6 +228,7 @@ test('applies changed configs from a new export', async (t) => {
   const summary = await importConfiguration(v2.db, changed);
 
   assert.equal(summary.configsUpdated, 1);
+  assert.equal(summary.flagsUpdated, 1);
 
   const flag = await targetApp.inject({
     method: 'GET',
@@ -184,6 +238,70 @@ test('applies changed configs from a new export', async (t) => {
 
   assert.equal(flag.json().enabled, false);
   assert.equal(flag.json().rolloutPercentage, 12.5);
+  assert.equal(flag.json().description, 'Changed description');
+});
+
+test('is additive: keeps unrelated projects/flags and does not rename existing ones', async (t) => {
+  const { v2: source } = await seedSource(t);
+  const data = await exportConfiguration(source.db);
+  const { app, v2 } = await createTarget(t);
+
+  await createProject(app, 'demo', 'Target Demo');
+  await createEnvironment(app, 'demo', 'production', 'Target Production');
+  await createFlag(app, 'demo', 'production', {
+    key: 'keep-me',
+    description: 'Must stay',
+    enabled: true,
+    rolloutPercentage: 100,
+  });
+  await createProject(app, 'unrelated', 'Unrelated');
+  await createEnvironment(app, 'unrelated', 'production', 'Production');
+  await createFlag(app, 'unrelated', 'production', {
+    key: 'unrelated-flag',
+    enabled: false,
+    rolloutPercentage: 0,
+  });
+
+  const summary = await importConfiguration(v2.db, data);
+  assert.ok(summary.flagsCreated >= 2);
+
+  const projects = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects',
+    headers: AUTHORIZATION,
+  });
+  const demo = projects.json().projects.find((project) => project.key === 'demo');
+  const unrelated = projects.json().projects.find(
+    (project) => project.key === 'unrelated',
+  );
+
+  assert.equal(demo.name, 'Target Demo');
+  assert.ok(unrelated);
+
+  const environments = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/demo/environments',
+    headers: AUTHORIZATION,
+  });
+  const production = environments.json().environments.find(
+    (environment) => environment.key === 'production',
+  );
+
+  assert.equal(production.name, 'Target Production');
+
+  for (const [project, environment, flagKey] of [
+    ['demo', 'production', 'keep-me'],
+    ['demo', 'production', 'new-checkout'],
+    ['unrelated', 'production', 'unrelated-flag'],
+  ]) {
+    const flag = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/${project}/environments/${environment}/flags/${flagKey}`,
+      headers: AUTHORIZATION,
+    });
+
+    assert.equal(flag.statusCode, 200, flag.body);
+  }
 });
 
 test('dry run reports changes without writing anything', async (t) => {
@@ -208,42 +326,38 @@ test('rejects invalid exports without partial writes', async (t) => {
   const valid = await exportConfiguration(source.db);
   const { v2 } = await createTarget(t);
 
+  const demo = valid.projects.find((project) => project.key === 'demo');
+  const production = demo.environments.find(
+    (environment) => environment.key === 'production',
+  );
+  const baseFlag = production.flags[0];
+  const withDemo = (project) => ({ ...valid, projects: [project] });
+
   const variants = [
     [{ ...valid, format: 'other' }, 'Unsupported format'],
     [{ ...valid, version: 2 }, 'Unsupported version'],
-    [{
-      ...valid,
-      projects: [{
-        ...valid.projects[0],
-        environments: [{
-          ...valid.projects[0].environments[0],
-          flags: [{
-            ...valid.projects[0].environments[0].flags[0],
-            type: 'string',
-          }],
-        }],
+    [withDemo({
+      ...demo,
+      environments: [{
+        ...production,
+        flags: [{ ...baseFlag, type: 'string' }],
       }],
-    }, 'only boolean'],
-    [{
-      ...valid,
-      projects: [{
-        ...valid.projects[0],
-        key: 'INVALID KEY',
+    }), 'only boolean'],
+    [withDemo({ ...demo, key: 'INVALID KEY' }), 'project.key'],
+    [withDemo({
+      ...demo,
+      environments: [{
+        ...production,
+        flags: [{ ...baseFlag, rolloutPercentage: 100.001 }],
       }],
-    }, 'project.key'],
-    [{
-      ...valid,
-      projects: [{
-        ...valid.projects[0],
-        environments: [{
-          ...valid.projects[0].environments[0],
-          flags: [{
-            ...valid.projects[0].environments[0].flags[0],
-            rolloutPercentage: 100.001,
-          }],
-        }],
+    }), 'between 0 and 100'],
+    [withDemo({
+      ...demo,
+      environments: [{
+        ...production,
+        flags: [{ ...baseFlag, rolloutPercentage: 12.3456 }],
       }],
-    }, 'three decimal'],
+    }), 'three decimal'],
   ];
 
   for (const [data, message] of variants) {
@@ -291,14 +405,14 @@ test('never touches existing API keys', async (t) => {
   const key = await createApiKey(app, 'demo', 'production', 'target key');
   const before = await v2.db
     .selectFrom('api_keys')
-    .select('id')
+    .selectAll()
     .execute();
 
   await importConfiguration(v2.db, data);
 
   const after = await v2.db
     .selectFrom('api_keys')
-    .select('id')
+    .selectAll()
     .execute();
   assert.deepEqual(after, before);
 

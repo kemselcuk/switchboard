@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { AppError } from '../../errors.js';
+import { AppError, ERROR_CODES } from '../../errors.js';
 import { V2_KEY_PATTERN } from '../schemas.js';
 
 export const EXPORT_FORMAT = 'switchboard-v2-export';
@@ -16,7 +16,7 @@ class DryRunRollback extends Error {
 }
 
 function invalid(message) {
-  return new AppError(400, 'INVALID_EXPORT', message);
+  return new AppError(400, ERROR_CODES.INVALID_EXPORT, message);
 }
 
 function assertKey(value, label) {

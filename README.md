@@ -312,10 +312,16 @@ V2_DB_PATH=./data/switchboard-v2.db npm run import:config -- --file backup.json
 DATABASE_URL=postgres://... npm run export:config -- --file backup.json
 ```
 
+To write JSON to stdout instead of a file, use
+`npm run --silent export:config` (the npm banner would otherwise corrupt the
+JSON) or call `node scripts/export-config.mjs` directly.
+
 Import is additive and idempotent: it creates missing projects, environments,
 and flags, updates flag descriptions and configs, and never deletes or renames
 anything. API keys must be recreated on the target instance. `--dry-run`
-validates and reports counts without writing. The format is
+validates and reports counts without persisting configuration rows; on a fresh
+path the database file/schema and default project may still be bootstrapped.
+The format is
 `switchboard-v2-export` version `1`; flags are listed per environment only when
 a config exists there.
 
@@ -347,7 +353,7 @@ that database and does not delete them (v2.0 has no project/flag deletion);
 point it at a dedicated benchmark database. Numbers are from one run and are
 directional, not a capacity guarantee.
 
-Current local suite: 122 tests, 119 pass, 3 skipped when `DATABASE_URL` is not
+Current local suite: 133 tests, 129 pass, 4 skipped when `DATABASE_URL` is not
 set.
 
 Real outputs: [`docs/EVIDENCE.md`](docs/EVIDENCE.md)

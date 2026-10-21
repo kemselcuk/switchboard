@@ -58,7 +58,8 @@ module; no new HTTP endpoints.
   - never delete or rename anything, never touch API keys.
 - Idempotent: importing the same file twice yields the same state; a changed
   export updates existing configs.
-- `dryRun` validates and counts changes without writing.
+- `dryRun` validates and counts changes, then rolls back configuration writes
+  (a fresh database path may still be bootstrapped).
 - Reject unknown formats/versions, non-boolean flag types, and invalid keys or
   rollout values with a clear error (no partial writes).
 
@@ -90,7 +91,8 @@ than boolean, HTTP endpoints, scheduled backups, and cross-version migration.
 - Round-trip into a fresh v2 database preserves keys, names, descriptions,
   enabled state, and rollout percentages; evaluations match.
 - Re-import is idempotent; a changed export updates configs.
-- Dry run performs no writes.
+- Dry run performs no configuration writes (schema/default-project bootstrap
+  is outside the transaction).
 - Invalid format/version/type/key/rollout is rejected without partial writes.
 - Import leaves existing API keys intact.
 - `npm test` is green; `npm run test:workspaces` is unaffected.
@@ -107,8 +109,11 @@ Landed on `main`:
 
 - `eb3e9d0` — core export/import repository, CLI scripts, and tests.
 
-Tests: `test/v2/transfer.test.js` 8/8, `test/v2/transfer-cli.test.js` 1/1;
-full suite 131 tests (128 pass, 3 Postgres skips). Real output is recorded in
+Tests: `test/v2/transfer.test.js` 9/9, `test/v2/transfer-cli.test.js` 1/1,
+Postgres transfer test 4/4 (`npm run test:db`); full suite 133 tests (129 pass,
+4 Postgres skips). Review fixes added message-specific validation, name/
+description/evaluation round-trip checks, additive/no-rename coverage, full
+API-key row comparison, Postgres transfer coverage, and CLI argument handling. Real output is recorded in
 `docs/EVIDENCE.md` under "v2.1 configuration transfer".
 
 Still out of scope: API-key/secret export, deletion, renaming keys, HTTP

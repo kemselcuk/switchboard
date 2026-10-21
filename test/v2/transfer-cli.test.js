@@ -54,6 +54,12 @@ test('export/import CLI round-trips a SQLite database', async (t) => {
     await source.destroy();
   }
 
+  const invalid = run('scripts/export-config.mjs', ['--file'], {
+    V2_DB_PATH: sourcePath,
+  });
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stderr, /--file requires a value/);
+
   const exported = run('scripts/export-config.mjs', ['--file', backupPath], {
     V2_DB_PATH: sourcePath,
   });
@@ -70,7 +76,7 @@ test('export/import CLI round-trips a SQLite database', async (t) => {
 
   const dryRun = run(
     'scripts/import-config.mjs',
-    ['--file', backupPath, '--dry-run'],
+    [`--file=${backupPath}`, '--dry-run'],
     { V2_DB_PATH: targetPath },
   );
 

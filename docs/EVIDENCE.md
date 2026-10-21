@@ -451,8 +451,8 @@ node --test test/v2/transfer.test.js
 ✔ rejects invalid exports without partial writes
 ✔ never touches existing API keys
 ✔ assigns per-project numeric legacy ids to imported flags
-ℹ tests 8
-ℹ pass 8
+ℹ tests 9
+ℹ pass 9
 ℹ fail 0
 ```
 
@@ -468,16 +468,27 @@ Full suite after the change:
 
 ```text
 npm test
-ℹ tests 131
+ℹ tests 133
 ℹ suites 0
-ℹ pass 128
+ℹ pass 129
 ℹ fail 0
 ℹ cancelled 0
-ℹ skipped 3
+ℹ skipped 4
 ℹ todo 0
 ```
 
-The 3 skips are the Postgres-only tests (`DATABASE_URL` unset).
+The 4 skips are the Postgres-only tests (`DATABASE_URL` unset). The same
+migration was verified on Postgres:
+
+```text
+DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run test:db
+✔ maps a Postgres storage failure to 503
+✔ Postgres migrations and v2 evaluation flow
+✔ Postgres covers migration, legacy routes, isolation and revocation
+✔ Postgres exports and re-imports configuration
+ℹ tests 4
+ℹ pass 4
+```
 
 ## Historical v1 evidence
 
