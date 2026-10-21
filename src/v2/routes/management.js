@@ -10,11 +10,24 @@ import {
   environmentBody,
   environmentParams,
   flagParams,
+  flagValuesError,
   projectBody,
   projectFlagParams,
   projectParams,
   updateFlagBody,
 } from '../schemas.js';
+
+function validationError(message) {
+  return new AppError(400, 'VALIDATION_ERROR', message);
+}
+
+function assertFlagValues(type, onValue, offValue) {
+  const message = flagValuesError(type, onValue, offValue);
+
+  if (message) {
+    throw validationError(message);
+  }
+}
 
 function rolloutToBasisPoints(value) {
   if (value === undefined) {
@@ -35,7 +48,7 @@ function rolloutToBasisPoints(value) {
 }
 
 function toFlagResponse(flag) {
-  return {
+  const response = {
     id: flag.id,
     key: flag.key,
     type: flag.type,
@@ -45,6 +58,13 @@ function toFlagResponse(flag) {
     createdAt: flag.createdAt,
     updatedAt: flag.updatedAt,
   };
+
+  if ((flag.type ?? 'boolean') !== 'boolean') {
+    response.onValue = flag.onValue;
+    response.offValue = flag.offValue;
+  }
+
+  return response;
 }
 
 export async function managementRoutes(app, { db, adminToken }) {
@@ -110,13 +130,20 @@ export async function managementRoutes(app, { db, adminToken }) {
     async (request, reply) => {
       const { project, environment } = await resolveEnvironment(request);
       const body = request.body;
+      const type = body.type ?? 'boolean';
+
+      assertFlagValues(type, body.onValue, body.offValue);
+
       const flag = await flags.createFlagInEnvironment({
         projectId: project.id,
         environmentId: environment.id,
         key: body.key,
+        type,
         description: body.description ?? '',
         enabled: body.enabled ?? false,
         rolloutBasisPoints: rolloutToBasisPoints(body.rolloutPercentage) ?? 0,
+        onValue: body.onValue,
+        offValue: body.offValue,
       });
 
       return reply.code(201).send(toFlagResponse(flag));
@@ -165,6 +192,23 @@ export async function managementRoutes(app, { db, adminToken }) {
     async (request) => {
       const { project, environment } = await resolveEnvironment(request);
       const body = request.body;
+      const existing = await flags.getFlag(
+        project.id,
+        environment.id,
+        request.params.key,
+      );
+      const type = existing.type ?? 'boolean';
+
+      if (type === 'boolean') {
+        assertFlagValues(type, body.onValue, body.offValue);
+      } else {
+        assertFlagValues(
+          type,
+          body.onValue === undefined ? existing.onValue : body.onValue,
+          body.offValue === undefined ? existing.offValue : body.offValue,
+        );
+      }
+
       const flag = await flags.updateFlag(
         project.id,
         environment.id,
@@ -173,6 +217,8 @@ export async function managementRoutes(app, { db, adminToken }) {
           description: body.description,
           enabled: body.enabled,
           rolloutBasisPoints: rolloutToBasisPoints(body.rolloutPercentage),
+          onValue: type === 'boolean' ? undefined : body.onValue,
+          offValue: type === 'boolean' ? undefined : body.offValue,
         },
       );
 

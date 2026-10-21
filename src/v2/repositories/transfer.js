@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import { AppError, ERROR_CODES } from '../../errors.js';
-import { V2_KEY_PATTERN } from '../schemas.js';
+import {
+  FLAG_TYPES,
+  flagValuesError,
+  V2_KEY_PATTERN,
+} from '../schemas.js';
 import { nextLegacyId } from './legacy-ids.js';
 
 export const EXPORT_FORMAT = 'switchboard-v2-export';
@@ -50,6 +54,22 @@ function assertRollout(value, label) {
   if (Math.abs(value * 1000 - Math.round(value * 1000)) > 1e-6) {
     throw invalid(`${label} supports at most three decimal places`);
   }
+}
+
+function assertFlagValues(type, flag) {
+  const message = flagValuesError(type, flag.onValue, flag.offValue);
+
+  if (message) {
+    throw invalid(`flag ${flag.key}: ${message}`);
+  }
+}
+
+function storedValue(type, value) {
+  return type === 'boolean' ? null : JSON.stringify(value);
+}
+
+function parseStoredValue(value) {
+  return typeof value === 'string' ? JSON.parse(value) : null;
 }
 
 function validateExport(data) {
@@ -121,9 +141,15 @@ function validateExport(data) {
         assertKey(flag.key, 'flag.key');
         assertDescription(flag.description ?? '', 'flag.description');
 
-        if (flag.type !== 'boolean') {
-          throw invalid(`flag ${flag.key}: only boolean flags are supported`);
+        const type = flag.type ?? 'boolean';
+
+        if (!FLAG_TYPES.includes(type)) {
+          throw invalid(
+            `flag ${flag.key}: type must be one of ${FLAG_TYPES.join(', ')}`,
+          );
         }
+
+        assertFlagValues(type, flag);
 
         if (typeof flag.enabled !== 'boolean') {
           throw invalid(`flag ${flag.key}: enabled must be a boolean`);
@@ -144,6 +170,30 @@ function validateExport(data) {
 
 function toPercent(basisPoints) {
   return Number((basisPoints / 1000).toFixed(3));
+}
+
+function toExportedFlag(flag) {
+  const type = flag.type ?? 'boolean';
+  const exported = {
+    key: flag.key,
+    type,
+    description: flag.description,
+    enabled: flag.enabled === 1,
+    rolloutPercentage: toPercent(flag.rollout_basis_points),
+    createdAt: flag.config_created_at > flag.flag_created_at
+      ? flag.config_created_at
+      : flag.flag_created_at,
+    updatedAt: flag.config_updated_at > flag.flag_updated_at
+      ? flag.config_updated_at
+      : flag.flag_updated_at,
+  };
+
+  if (type !== 'boolean') {
+    exported.onValue = parseStoredValue(flag.on_value);
+    exported.offValue = parseStoredValue(flag.off_value);
+  }
+
+  return exported;
 }
 
 export async function exportConfiguration(db) {
@@ -178,6 +228,8 @@ export async function exportConfiguration(db) {
           'flags.updated_at as flag_updated_at',
           'flag_configs.enabled',
           'flag_configs.rollout_basis_points',
+          'flag_configs.on_value',
+          'flag_configs.off_value',
           'flag_configs.created_at as config_created_at',
           'flag_configs.updated_at as config_updated_at',
         ])
@@ -190,19 +242,7 @@ export async function exportConfiguration(db) {
       exportedEnvironments.push({
         key: environment.key,
         name: environment.name,
-        flags: flags.map((flag) => ({
-          key: flag.key,
-          type: flag.type,
-          description: flag.description,
-          enabled: flag.enabled === 1,
-          rolloutPercentage: toPercent(flag.rollout_basis_points),
-          createdAt: flag.config_created_at > flag.flag_created_at
-            ? flag.config_created_at
-            : flag.flag_created_at,
-          updatedAt: flag.config_updated_at > flag.flag_updated_at
-            ? flag.config_updated_at
-            : flag.flag_updated_at,
-        })),
+        flags: flags.map(toExportedFlag),
       });
     }
 
@@ -269,6 +309,9 @@ async function applyImport(trx, data, summary) {
       for (const flag of environment.flags) {
         summary.totalFlags += 1;
 
+        const type = flag.type ?? 'boolean';
+        const onValue = storedValue(type, flag.onValue);
+        const offValue = storedValue(type, flag.offValue);
         let flagRow = await trx
           .selectFrom('flags')
           .selectAll()
@@ -282,7 +325,7 @@ async function applyImport(trx, data, summary) {
             legacy_id: await nextLegacyId(trx, projectRow.id),
             project_id: projectRow.id,
             key: flag.key,
-            type: 'boolean',
+            type,
             description: flag.description ?? '',
             created_at: now,
             updated_at: now,
@@ -290,16 +333,24 @@ async function applyImport(trx, data, summary) {
 
           await trx.insertInto('flags').values(flagRow).execute();
           summary.flagsCreated += 1;
-        } else if (flagRow.description !== (flag.description ?? '')) {
-          await trx
-            .updateTable('flags')
-            .set({
-              description: flag.description ?? '',
-              updated_at: now,
-            })
-            .where('id', '=', flagRow.id)
-            .execute();
-          summary.flagsUpdated += 1;
+        } else {
+          if (flagRow.type !== type) {
+            throw invalid(
+              `flag ${flag.key}: type ${type} does not match existing type ${flagRow.type}`,
+            );
+          }
+
+          if (flagRow.description !== (flag.description ?? '')) {
+            await trx
+              .updateTable('flags')
+              .set({
+                description: flag.description ?? '',
+                updated_at: now,
+              })
+              .where('id', '=', flagRow.id)
+              .execute();
+            summary.flagsUpdated += 1;
+          }
         }
 
         const enabled = flag.enabled ? 1 : 0;
@@ -322,6 +373,8 @@ async function applyImport(trx, data, summary) {
               environment_id: environmentRow.id,
               enabled,
               rollout_basis_points: rolloutBasisPoints,
+              on_value: onValue,
+              off_value: offValue,
               created_at: now,
               updated_at: now,
             })
@@ -330,12 +383,16 @@ async function applyImport(trx, data, summary) {
         } else if (
           existingConfig.enabled !== enabled
           || existingConfig.rollout_basis_points !== rolloutBasisPoints
+          || existingConfig.on_value !== onValue
+          || existingConfig.off_value !== offValue
         ) {
           await trx
             .updateTable('flag_configs')
             .set({
               enabled,
               rollout_basis_points: rolloutBasisPoints,
+              on_value: onValue,
+              off_value: offValue,
               updated_at: now,
             })
             .where('id', '=', existingConfig.id)

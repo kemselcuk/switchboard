@@ -36,6 +36,7 @@ export function createLegacyRepository(db, { projectId, environmentId }) {
         projectId,
         environmentId,
         key,
+        type: 'boolean',
         description,
         enabled,
         rolloutBasisPoints: rolloutPercentage * 1000,
@@ -53,19 +54,21 @@ export function createLegacyRepository(db, { projectId, environmentId }) {
   async function listFlags() {
     const rows = await flags.listFlags(projectId, environmentId);
 
-    return rows.map(toLegacyFlag);
+    return rows
+      .filter((flag) => flag.type === 'boolean')
+      .map(toLegacyFlag);
   }
 
   async function getFlag(key) {
     const flag = await flags.findFlag(projectId, environmentId, key);
 
-    return flag ? toLegacyFlag(flag) : null;
+    return flag && flag.type === 'boolean' ? toLegacyFlag(flag) : null;
   }
 
   async function updateFlag(key, patch = {}) {
     const existing = await flags.findFlag(projectId, environmentId, key);
 
-    if (!existing) {
+    if (!existing || existing.type !== 'boolean') {
       throw new FlagNotFoundError(key);
     }
 

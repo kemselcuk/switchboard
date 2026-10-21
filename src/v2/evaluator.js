@@ -11,12 +11,16 @@ export function bucketForV2(projectKey, flagKey, targetingKey) {
   return Math.floor((value / 2 ** 32) * V2_ROLLOUT_BUCKETS);
 }
 
-export function evaluateBooleanFlag({ projectKey, flag, context }) {
+export function evaluateFlag({ projectKey, flag, context }) {
   const targetingKey = context?.targetingKey || 'anonymous';
+  const type = flag.type ?? 'boolean';
+  const isBoolean = type === 'boolean';
+  const onValue = isBoolean ? true : flag.onValue;
+  const offValue = isBoolean ? false : flag.offValue;
 
   if (!flag.enabled) {
     return {
-      value: false,
+      value: offValue,
       reason: 'DISABLED',
       variant: 'disabled',
       bucket: null,
@@ -27,9 +31,14 @@ export function evaluateBooleanFlag({ projectKey, flag, context }) {
   const included = bucket < flag.rolloutBasisPoints;
 
   return {
-    value: included,
+    value: included ? onValue : offValue,
     reason: 'SPLIT',
-    variant: included ? 'enabled' : 'disabled',
+    variant: isBoolean
+      ? (included ? 'enabled' : 'disabled')
+      : (included ? 'on' : 'off'),
     bucket,
   };
 }
+
+// Kept for callers that still use the pre-typed name.
+export const evaluateBooleanFlag = evaluateFlag;

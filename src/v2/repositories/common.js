@@ -34,6 +34,14 @@ export function mapEnvironment(row) {
   };
 }
 
+function parseFlagValue(type, value) {
+  if (type === 'boolean' || typeof value !== 'string') {
+    return null;
+  }
+
+  return JSON.parse(value);
+}
+
 export function mapFlag(row) {
   const updatedAt = row.config_updated_at > row.flag_updated_at
     ? row.config_updated_at
@@ -47,6 +55,8 @@ export function mapFlag(row) {
     description: row.description,
     enabled: row.enabled === 1,
     rolloutBasisPoints: row.rollout_basis_points,
+    onValue: parseFlagValue(row.type, row.on_value),
+    offValue: parseFlagValue(row.type, row.off_value),
     createdAt: row.flag_created_at,
     updatedAt,
   };

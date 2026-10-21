@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { normalizeError, sendError } from '../../errors.js';
 import { createApiKeyAuthHook } from '../api-key-auth.js';
-import { evaluateBooleanFlag } from '../evaluator.js';
+import { evaluateFlag } from '../evaluator.js';
 import { createFlagRepository } from '../repositories/flags.js';
 import {
   ofrepEvaluationBody,
@@ -10,7 +10,15 @@ import {
 } from '../schemas.js';
 
 function evaluationKey(flag, context) {
-  return `${flag.key}:${context?.targetingKey ?? 'anonymous'}:${flag.rolloutBasisPoints}:${flag.enabled}`;
+  return [
+    flag.key,
+    context?.targetingKey ?? 'anonymous',
+    flag.rolloutBasisPoints,
+    flag.enabled,
+    flag.type,
+    JSON.stringify(flag.onValue),
+    JSON.stringify(flag.offValue),
+  ].join(':');
 }
 
 function etagFor(projectKey, flags, context) {
@@ -127,7 +135,7 @@ export async function ofrepRoutes(app, { db }) {
         });
       }
 
-      const result = evaluateBooleanFlag({
+      const result = evaluateFlag({
         projectKey,
         flag,
         context,
@@ -154,7 +162,7 @@ export async function ofrepRoutes(app, { db }) {
       }
 
       const evaluations = list.map((flag) => {
-        const result = evaluateBooleanFlag({
+        const result = evaluateFlag({
           projectKey,
           flag,
           context,

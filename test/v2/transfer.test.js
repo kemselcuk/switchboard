@@ -101,6 +101,210 @@ test('exports projects, environments, flags and configs without secrets', async 
   assert.equal(serialized.includes('environment_id'), false);
 });
 
+test('round-trips typed flags through export and import', async (t) => {
+  const { app: sourceApp, v2: source } = await createV2App(t);
+
+  await createProject(sourceApp, 'typed', 'Typed');
+  await createEnvironment(sourceApp, 'typed');
+  await createFlag(sourceApp, 'typed', 'production', {
+    key: 'greeting',
+    type: 'string',
+    description: 'Greeting',
+    onValue: 'hello',
+    offValue: 'goodbye',
+    enabled: true,
+    rolloutPercentage: 100,
+  });
+  await createFlag(sourceApp, 'typed', 'production', {
+    key: 'ratio',
+    type: 'number',
+    onValue: 1.25,
+    offValue: 0.5,
+    enabled: true,
+    rolloutPercentage: 50,
+  });
+  await createFlag(sourceApp, 'typed', 'production', {
+    key: 'theme',
+    type: 'json',
+    onValue: { name: 'dark', columns: 3 },
+    offValue: { name: 'light', columns: 1 },
+    enabled: false,
+    rolloutPercentage: 0,
+  });
+  await createFlag(sourceApp, 'typed', 'production', {
+    key: 'classic',
+    enabled: true,
+    rolloutPercentage: 25,
+  });
+
+  const data = await exportConfiguration(source.db);
+  const typed = data.projects.find((project) => project.key === 'typed');
+  const exported = Object.fromEntries(
+    typed.environments[0].flags.map((flag) => [flag.key, flag]),
+  );
+
+  assert.equal(exported.greeting.type, 'string');
+  assert.equal(exported.greeting.onValue, 'hello');
+  assert.equal(exported.greeting.offValue, 'goodbye');
+  assert.equal(exported.ratio.type, 'number');
+  assert.equal(exported.ratio.onValue, 1.25);
+  assert.deepEqual(exported.theme.onValue, { name: 'dark', columns: 3 });
+  assert.deepEqual(exported.theme.offValue, { name: 'light', columns: 1 });
+  assert.equal(exported.classic.type, 'boolean');
+  assert.equal('onValue' in exported.classic, false);
+  assert.equal('offValue' in exported.classic, false);
+
+  const { app, v2 } = await createTarget(t);
+  const summary = await importConfiguration(v2.db, data);
+
+  assert.equal(summary.flagsCreated, 4);
+  assert.equal(summary.configsCreated, 4);
+
+  const expected = {
+    greeting: ['string', 'hello', 'goodbye'],
+    ratio: ['number', 1.25, 0.5],
+  };
+
+  for (const [key, [type, onValue, offValue]] of Object.entries(expected)) {
+    const flag = await app.inject({
+      method: 'GET',
+      url: `/api/v1/projects/typed/environments/production/flags/${key}`,
+      headers: AUTHORIZATION,
+    });
+
+    assert.equal(flag.statusCode, 200);
+    assert.equal(flag.json().type, type);
+    assert.equal(flag.json().onValue, onValue);
+    assert.equal(flag.json().offValue, offValue);
+  }
+
+  const theme = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/typed/environments/production/flags/theme',
+    headers: AUTHORIZATION,
+  });
+  assert.equal(theme.statusCode, 200);
+  assert.deepEqual(theme.json().onValue, { name: 'dark', columns: 3 });
+  assert.deepEqual(theme.json().offValue, { name: 'light', columns: 1 });
+
+  const classic = await app.inject({
+    method: 'GET',
+    url: '/api/v1/projects/typed/environments/production/flags/classic',
+    headers: AUTHORIZATION,
+  });
+  assert.equal(classic.statusCode, 200);
+  assert.equal(classic.json().type, 'boolean');
+  assert.equal(classic.json().enabled, true);
+  assert.equal(classic.json().rolloutPercentage, 25);
+  assert.equal('onValue' in classic.json(), false);
+
+  const key = await createApiKey(app, 'typed', 'production');
+  const evaluation = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/greeting',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+  assert.equal(evaluation.statusCode, 200);
+  assert.equal(evaluation.json().value, 'hello');
+
+  const jsonEvaluation = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/theme',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+  assert.equal(jsonEvaluation.statusCode, 200);
+  assert.deepEqual(jsonEvaluation.json().value, { name: 'light', columns: 1 });
+  assert.equal(jsonEvaluation.json().reason, 'DISABLED');
+});
+
+test('rejects invalid typed values and type changes during import', async (t) => {
+  const { v2 } = await createTarget(t);
+
+  function typedExport(flag) {
+    return {
+      format: EXPORT_FORMAT,
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      projects: [{
+        key: 'typed',
+        name: 'Typed',
+        environments: [{
+          key: 'production',
+          name: 'Production',
+          flags: [{
+            key: 'typed-flag',
+            type: 'string',
+            description: '',
+            enabled: true,
+            rolloutPercentage: 100,
+            onValue: 'on',
+            offValue: 'off',
+            ...flag,
+          }],
+        }],
+      }],
+    };
+  }
+
+  const invalidVariants = [
+    [typedExport({ offValue: undefined }), 'onValue and offValue are required'],
+    [typedExport({ type: 'number', onValue: '1' }), 'finite number'],
+    [typedExport({ type: 'json', onValue: [] }), 'plain JSON object'],
+    [typedExport({ type: 'json', onValue: { data: 'x'.repeat(8200) } }), '8192'],
+    [typedExport({ onValue: 'a'.repeat(4097) }), '4096'],
+    [typedExport({ type: 'date' }), 'type must be one of'],
+    [
+      typedExport({ type: 'boolean' }),
+      'not allowed for boolean flags',
+    ],
+  ];
+
+  for (const [data, message] of invalidVariants) {
+    await assert.rejects(
+      () => importConfiguration(v2.db, data),
+      invalidExport(message),
+    );
+  }
+
+  const { app: sourceApp, v2: source } = await createV2App(t);
+  await createProject(sourceApp, 'typed', 'Typed');
+  await createEnvironment(sourceApp, 'typed');
+  await createFlag(sourceApp, 'typed', 'production', {
+    key: 'typed-flag',
+    enabled: true,
+    rolloutPercentage: 100,
+  });
+  const booleanExport = await exportConfiguration(source.db);
+
+  await importConfiguration(v2.db, booleanExport);
+
+  const changed = structuredClone(booleanExport);
+  const changedProject = changed.projects.find(
+    (project) => project.key === 'typed',
+  );
+  const changedFlag = changedProject.environments[0].flags.find(
+    (flag) => flag.key === 'typed-flag',
+  );
+  changedFlag.type = 'string';
+  changedFlag.onValue = 'on';
+  changedFlag.offValue = 'off';
+
+  await assert.rejects(
+    () => importConfiguration(v2.db, changed),
+    invalidExport('does not match existing type boolean'),
+  );
+
+  const stored = await v2.db
+    .selectFrom('flags')
+    .select('type')
+    .where('key', '=', 'typed-flag')
+    .executeTakeFirst();
+
+  assert.equal(stored.type, 'boolean');
+});
+
 test('round-trips into a fresh database with new IDs and matching values', async (t) => {
   const { app: sourceApp, v2: source, sourceKey } = await seedSource(t);
   const data = await exportConfiguration(source.db);
@@ -353,7 +557,7 @@ test('rejects invalid exports without partial writes', async (t) => {
         ...production,
         flags: [{ ...baseFlag, type: 'string' }],
       }],
-    }), 'only boolean'],
+    }), 'required'],
     [withDemo({ ...demo, key: 'INVALID KEY' }), 'project.key'],
     [withDemo({
       ...demo,

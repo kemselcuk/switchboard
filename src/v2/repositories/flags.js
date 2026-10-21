@@ -18,8 +18,18 @@ const FLAG_SELECT = [
   'flags.updated_at as flag_updated_at',
   'flag_configs.enabled',
   'flag_configs.rollout_basis_points',
+  'flag_configs.on_value',
+  'flag_configs.off_value',
   'flag_configs.updated_at as config_updated_at',
 ];
+
+function serializeFlagValue(type, value) {
+  if (type === 'boolean' || value === undefined) {
+    return null;
+  }
+
+  return JSON.stringify(value);
+}
 
 function isLegacyIdConflict(error) {
   return error?.constraint === 'flags_project_legacy_id_unique'
@@ -40,9 +50,12 @@ export function createFlagRepository(db) {
     projectId,
     environmentId,
     key,
+    type = 'boolean',
     description = '',
     enabled = false,
     rolloutBasisPoints = 0,
+    onValue,
+    offValue,
   }) {
     const now = new Date().toISOString();
 
@@ -62,13 +75,18 @@ export function createFlagRepository(db) {
               legacy_id: await nextLegacyId(trx, projectId),
               project_id: projectId,
               key,
-              type: 'boolean',
+              type,
               description,
               created_at: now,
               updated_at: now,
             };
 
             await trx.insertInto('flags').values(flag).execute();
+          } else if (flag.type !== type) {
+            throw conflict(
+              'FLAG_TYPE_MISMATCH',
+              `Flag '${key}' already exists with type ${flag.type}`,
+            );
           } else if (flag.legacy_id === null || flag.legacy_id === undefined) {
             flag.legacy_id = await nextLegacyId(trx, projectId);
 
@@ -98,6 +116,8 @@ export function createFlagRepository(db) {
               environment_id: environmentId,
               enabled: enabled ? 1 : 0,
               rollout_basis_points: rolloutBasisPoints,
+              on_value: serializeFlagValue(type, onValue),
+              off_value: serializeFlagValue(type, offValue),
               created_at: now,
               updated_at: now,
             })
@@ -151,7 +171,13 @@ export function createFlagRepository(db) {
     projectId,
     environmentId,
     key,
-    { description, enabled, rolloutBasisPoints },
+    {
+      description,
+      enabled,
+      rolloutBasisPoints,
+      onValue,
+      offValue,
+    },
   ) {
     const now = new Date().toISOString();
 
@@ -159,7 +185,7 @@ export function createFlagRepository(db) {
       await db.transaction().execute(async (trx) => {
         const flag = await trx
           .selectFrom('flags')
-          .select('id')
+          .select(['id', 'type'])
           .where('project_id', '=', projectId)
           .where('key', '=', key)
           .executeTakeFirst();
@@ -187,7 +213,12 @@ export function createFlagRepository(db) {
             .execute();
         }
 
-        if (enabled !== undefined || rolloutBasisPoints !== undefined) {
+        const hasConfigPatch = enabled !== undefined
+          || rolloutBasisPoints !== undefined
+          || onValue !== undefined
+          || offValue !== undefined;
+
+        if (hasConfigPatch) {
           const patch = { updated_at: now };
 
           if (enabled !== undefined) {
@@ -195,6 +226,12 @@ export function createFlagRepository(db) {
           }
           if (rolloutBasisPoints !== undefined) {
             patch.rollout_basis_points = rolloutBasisPoints;
+          }
+          if (onValue !== undefined) {
+            patch.on_value = serializeFlagValue(flag.type, onValue);
+          }
+          if (offValue !== undefined) {
+            patch.off_value = serializeFlagValue(flag.type, offValue);
           }
 
           const result = await trx

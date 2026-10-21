@@ -87,6 +87,78 @@ test('bulk OFREP response matches the official schema', async (t) => {
   assert.equal(typeof response.json().metadata.version, 'string');
 });
 
+test('typed OFREP responses match the official value schemas', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  await createFlag(app, 'demo', 'production', {
+    key: 'string-flag',
+    type: 'string',
+    onValue: 'blue',
+    offValue: 'red',
+    enabled: true,
+    rolloutPercentage: 100,
+  });
+  await createFlag(app, 'demo', 'production', {
+    key: 'number-flag',
+    type: 'number',
+    onValue: 42.5,
+    offValue: 0.5,
+    enabled: true,
+    rolloutPercentage: 100,
+  });
+  await createFlag(app, 'demo', 'production', {
+    key: 'object-flag',
+    type: 'json',
+    onValue: { theme: 'dark' },
+    offValue: { theme: 'light' },
+    enabled: true,
+    rolloutPercentage: 100,
+  });
+  const key = await createApiKey(app, 'demo', 'production');
+
+  async function single(flagKey) {
+    return app.inject({
+      method: 'POST',
+      url: `/ofrep/v1/evaluate/flags/${flagKey}`,
+      headers: { 'x-api-key': key.key },
+      payload: { context: { targetingKey: 'user-1' } },
+    });
+  }
+
+  const stringResponse = await single('string-flag');
+  assert.equal(stringResponse.statusCode, 200);
+  assert.equal(stringResponse.json().value, 'blue');
+  assert.equal(validator('stringFlag')(stringResponse.json()), true);
+
+  const numberResponse = await single('number-flag');
+  assert.equal(numberResponse.statusCode, 200);
+  assert.equal(numberResponse.json().value, 42.5);
+  assert.equal(validator('floatFlag')(numberResponse.json()), true);
+
+  const objectResponse = await single('object-flag');
+  assert.equal(objectResponse.statusCode, 200);
+  assert.deepEqual(objectResponse.json().value, { theme: 'dark' });
+  assert.equal(validator('objectFlag')(objectResponse.json()), true);
+
+  const bulk = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1' } },
+  });
+
+  assert.equal(bulk.statusCode, 200);
+
+  const byKey = Object.fromEntries(
+    bulk.json().flags.map((flag) => [flag.key, flag]),
+  );
+
+  assert.equal(validator('stringFlag')(byKey['string-flag']), true);
+  assert.equal(validator('floatFlag')(byKey['number-flag']), true);
+  assert.equal(validator('objectFlag')(byKey['object-flag']), true);
+});
+
 test('OFREP not-found response matches the official schema', async (t) => {
   const { app } = await createV2App(t);
   await createProject(app);
