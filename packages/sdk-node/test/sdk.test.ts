@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { SwitchboardClient } from '../src/index.js';
 
@@ -44,6 +46,57 @@ function bulkResponse(flags: unknown[]): string {
   return JSON.stringify({
     flags,
     metadata: { version: 'bulk-v1' },
+  });
+}
+
+type ChildResult = {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+};
+
+// Runs a script in a fresh Node process so the test can prove the SDK keeps a
+// standalone awaited call alive on its own, without the test runner's handles.
+function runChildNode(
+  script: string,
+  env: Record<string, string>,
+): Promise<ChildResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '-e', script],
+      {
+        cwd: fileURLToPath(new URL('..', import.meta.url)),
+        env: { ...process.env, ...env },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+
+    let stdout = '';
+    let stderr = '';
+
+    // Safety net: a hung child must fail the test instead of blocking it.
+    const killTimer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(
+        `child process did not exit; stdout=${stdout} stderr=${stderr}`,
+      ));
+    }, 15000);
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (error) => {
+      clearTimeout(killTimer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      clearTimeout(killTimer);
+      resolve({ code, stdout, stderr });
+    });
   });
 }
 
@@ -630,6 +683,58 @@ test('close interrupts the retry backoff sleep', async (t) => {
   assert.ok(details.errorCode);
   assert.equal(requestCount, 1);
   assert.ok(elapsedMs < 1000, `request settled after ${elapsedMs}ms`);
+});
+
+test('an awaited call survives the retry backoff without other handles', async (t) => {
+  let requestCount = 0;
+  const server = await startServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      requestCount += 1;
+
+      if (requestCount === 1) {
+        // Close the connection so the only handle the client has during the
+        // backoff is the retry timer itself.
+        response.writeHead(503, { connection: 'close' });
+        response.end();
+        return;
+      }
+
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        key: 'flag',
+        value: true,
+        reason: 'SPLIT',
+      }));
+    });
+  });
+  t.after(server.close);
+
+  const result = await runChildNode(
+    `
+      const { SwitchboardClient } = await import(
+        process.env.SWITCHBOARD_SDK_ENTRY
+      );
+      const client = new SwitchboardClient({
+        baseUrl: process.env.SWITCHBOARD_BASE_URL,
+        apiKey: 'key',
+        timeoutMs: 5000,
+        maxRetries: 1,
+        retryBaseDelayMs: 150,
+      });
+      const details = await client.getBooleanDetails('flag', false);
+      console.log('value=' + details.value + ' reason=' + details.reason);
+      client.close();
+    `,
+    {
+      SWITCHBOARD_SDK_ENTRY: new URL('../src/index.js', import.meta.url).href,
+      SWITCHBOARD_BASE_URL: server.baseUrl,
+    },
+  );
+
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout.trim(), 'value=true reason=SPLIT');
+  assert.equal(requestCount, 2);
 });
 
 test('retries single-flag 5xx responses exactly maxRetries + 1 times', async (t) => {

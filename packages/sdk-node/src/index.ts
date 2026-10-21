@@ -637,9 +637,11 @@ export class SwitchboardClient {
       }
 
       const controller = new AbortController();
+      // Ref'ed on purpose: a standalone awaited evaluation (CLI/one-shot) must
+      // keep the process alive while its request is pending. The timer is
+      // cleared as soon as the attempt settles.
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
-      unrefTimer(timer);
       this.inFlightControllers.add(controller);
 
       let result: TransportResult;
@@ -714,12 +716,13 @@ export class SwitchboardClient {
         clearTimeout(timer);
         resolve();
       };
+      // Ref'ed on purpose: the backoff must keep a standalone awaited call
+      // (CLI/one-shot) alive until the retry happens. close() still wakes it.
       const timer = setTimeout(() => {
         this.closeWaiters.delete(onClose);
         resolve();
       }, delayMs);
 
-      unrefTimer(timer);
       this.closeWaiters.add(onClose);
     });
   }
