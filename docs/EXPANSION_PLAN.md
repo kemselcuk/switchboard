@@ -314,4 +314,5 @@ provider install outside the monorepo.
 | 16.2 | Package metadata | `license`, `repository.directory`, `engines`, `files`; LICENSE in both tarballs; still `private: true` |
 | 16.3 | Publish checklist | README documents the release steps and credentials requirement; actual publish remains out of scope |
 
-No registry automation, provenance, signing, or GitHub Packages in this track.
+Landed on `main` in `7d3f02f`; see the task status for test evidence. No
+registry automation, provenance, signing, or GitHub Packages in this track.

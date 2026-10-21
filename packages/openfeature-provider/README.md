@@ -17,6 +17,24 @@ npm test --workspace @switchboard/openfeature-provider
 Build `@switchboard/sdk` first, or run `npm run build` at the repository root.
 `npm run demo:v2` builds both packages automatically.
 
+## Install from a local tarball
+
+From the repository root:
+
+```bash
+npm run build
+npm pack --workspace @switchboard/sdk --workspace @switchboard/openfeature-provider
+```
+
+In the consuming project install **both** tarballs (the provider depends on the
+SDK at the same version):
+
+```bash
+npm install /path/to/switchboard-sdk-2.0.0.tgz /path/to/switchboard-openfeature-provider-2.0.0.tgz
+```
+
+Both packages are `private` and not published to npm.
+
 ## Usage
 
 ```js

@@ -600,6 +600,24 @@ npm test
 ℹ todo 0
 ```
 
+### v2.1 package install verification
+
+Task 087 packs both workspaces, installs them into a temporary consumer, and
+evaluates through the SDK and the provider against a mock OFREP server.
+
+```text
+npm run test:packages
+Tarball: switchboard-openfeature-provider-2.0.0.tgz (3.5 KiB)
+Tarball: switchboard-sdk-2.0.0.tgz (10.8 KiB)
+Installed packages: @switchboard/sdk@2.0.0, @switchboard/openfeature-provider@2.0.0
+Verification: {"sdk":true,"provider":true,"reason":"SPLIT"}
+Package install check passed.
+```
+
+The tarballs contain `dist/index.js`, `README.md`, and `LICENSE`, with no
+`src/` or `test/` files. `npm test` remains at 146 tests (141 pass, 5 Postgres
+skips) and `npm audit` reports no vulnerabilities.
+
 ## Historical v1 evidence
 
 ## 1. Automated tests

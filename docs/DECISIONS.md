@@ -502,3 +502,26 @@ The v1 migration reserves preserved IDs and advances the sequence.
 - The extra sequence table is internal and not exposed by the API.
 - Audit/restore/soft delete and project/environment deletion remain out of
   scope.
+
+## ADR-028 — Verified tarball distribution, manual npm publish
+
+**Context:** The SDK and provider are npm workspaces used by the examples, but
+they were only verified inside the monorepo. Other projects need a reliable
+install path, while registry publishing needs maintainer credentials and is a
+release decision.
+
+**Decision:** Keep both packages `private` until a release. Ship correct
+metadata (`license`, `repository` with directory, `engines`, `files` including
+README/LICENSE) and verify `npm pack` tarballs in `npm run test:packages`: the
+script builds both packages, packs them into a temporary directory, checks the
+contents, installs them into a temporary consumer, imports both, and evaluates
+a flag through the SDK and the provider against a mock OFREP server. Actual
+`npm publish` remains a documented manual step (bump versions, remove
+`private`, publish the SDK first, provide credentials locally).
+
+**Consequences:**
+- Installability is tested by command, not assumed from workspace links.
+- No registry automation, provenance/signing, or GitHub Packages in v2.1.
+- The provider must be installed with the SDK at the same version.
+- Tarballs are ignored by git; the verification script cleans up after itself.
+- A future release can flip `private` and publish without code changes.

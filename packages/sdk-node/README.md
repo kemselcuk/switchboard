@@ -18,6 +18,23 @@ The package entry point is `dist/index.js` with types in `dist/index.d.ts`, so
 build before importing it. `npm run demo:v2` at the repository root builds it
 automatically.
 
+## Install from a local tarball
+
+From the repository root:
+
+```bash
+npm run build --workspace @switchboard/sdk
+npm pack --workspace @switchboard/sdk
+```
+
+Then in the consuming project:
+
+```bash
+npm install /path/to/switchboard-sdk-2.0.0.tgz
+```
+
+The package is `private` and not published to npm.
+
 ## Usage
 
 ```js

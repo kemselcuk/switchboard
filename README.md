@@ -30,6 +30,7 @@ project isolation, 20%→40% monotonicity, two services, and the legacy API.
 - SQLite → Postgres migration for existing flags.
 - Versioned JSON configuration export/import (API keys excluded).
 - Project-scoped flag deletion with cascading environment configs.
+- Verified tarball install for the SDK and OpenFeature provider.
 - Dependency-free Prometheus `/metrics` endpoint.
 
 Targeting rules/segments, string/number/JSON flag types, a full admin dashboard,
@@ -347,6 +348,34 @@ The format is
 `switchboard-v2-export` version `1`; flags are listed per environment only when
 a config exists there.
 
+## Using the packages outside this repository
+
+`@switchboard/sdk` and `@switchboard/openfeature-provider` remain **private and
+unpublished**. They can be packed as tarballs and installed in another project:
+
+```bash
+npm ci
+npm run build
+npm pack --workspace @switchboard/sdk --workspace @switchboard/openfeature-provider
+
+# in the consuming project
+npm install ./switchboard-sdk-2.0.0.tgz ./switchboard-openfeature-provider-2.0.0.tgz
+```
+
+The provider depends on the SDK at the same version, so install both tarballs
+together. `npm run test:packages` repeats this in a temporary consumer project,
+imports both packages, and evaluates a flag against a mock OFREP server; it
+leaves no tarballs behind.
+
+Publishing is a manual release step and is not automated:
+
+1. bump the versions in both package manifests and the workspace dependency,
+2. remove `"private": true` from both packages,
+3. `npm publish --workspace @switchboard/sdk --access public`, then the
+   provider,
+4. provide npm credentials through your normal local npm configuration (never
+   commit them).
+
 ## Metrics
 
 `GET /metrics` exposes Prometheus text format 0.0.4 for self-hosted monitoring.
@@ -381,6 +410,7 @@ npm run test:db       # Postgres integration (requires DATABASE_URL)
 npm run test:contract # OFREP contract + official @openfeature/ofrep-provider test
 npm run test:workspaces # SDK/provider build + tests
 npm run smoke         # Docker Compose + Postgres smoke test
+npm run test:packages # pack + install both packages in a temp consumer
 npm run bench         # OFREP load benchmark (see below)
 ```
 

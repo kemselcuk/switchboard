@@ -50,3 +50,13 @@ signing, GitHub Packages, and version bumps.
 ## Workflow
 
 Implement directly; one independent review round if available.
+
+## Status (2026-10-21)
+
+Landed on `main` in `7d3f02f`: package metadata, LICENSE copies, tarball
+verification script, `test:packages`, and docs. `npm run test:packages` passed
+with both packages installed in a temp consumer and `{"sdk":true,
+"provider":true,"reason":"SPLIT"}`.
+
+Still out of scope: actual npm publish, registry credentials, CI release
+automation, provenance/signing, GitHub Packages, and version bumps.
