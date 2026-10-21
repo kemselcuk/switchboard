@@ -53,7 +53,12 @@ try {
 
   for (const tarball of tarballs) {
     const files = tarballFiles(tarball);
-    const required = ['package/dist/index.js', 'package/README.md', 'package/LICENSE'];
+    const required = [
+      'package/dist/index.js',
+      'package/dist/index.d.ts',
+      'package/README.md',
+      'package/LICENSE',
+    ];
 
     for (const file of required) {
       if (!files.includes(file)) {
@@ -86,6 +91,7 @@ try {
 import { once } from 'node:events';
 import { SwitchboardClient } from '@switchboard/sdk';
 import { SwitchboardProvider } from '@switchboard/openfeature-provider';
+import { OpenFeature } from '@openfeature/server-sdk';
 
 const server = http.createServer((request, response) => {
   let body = '';
@@ -144,12 +150,12 @@ const direct = await client.getBooleanDetails(
 );
 
 const provider = new SwitchboardProvider({ baseUrl, apiKey });
-const viaProvider = await provider.resolveBooleanEvaluation(
-  'new-checkout',
-  false,
-  { targetingKey: 'package-user' },
-);
+await OpenFeature.setProviderAndWait(provider);
+const viaProvider = await OpenFeature
+  .getClient()
+  .getBooleanDetails('new-checkout', false, { targetingKey: 'package-user' });
 
+await OpenFeature.clearProviders();
 await provider.onClose();
 client.close();
 server.close();

@@ -10,7 +10,7 @@ provisional for v2.0.
 
 ```bash
 npm ci
-npm run build --workspace @switchboard/openfeature-provider
+npm run build
 npm test --workspace @switchboard/openfeature-provider
 ```
 

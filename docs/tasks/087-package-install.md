@@ -53,8 +53,9 @@ Implement directly; one independent review round if available.
 
 ## Status (2026-10-21)
 
-Landed on `main` in `7d3f02f`: package metadata, LICENSE copies, tarball
-verification script, `test:packages`, and docs. `npm run test:packages` passed
+Landed on `main`: `7d3f02f` (metadata, LICENSE copies, tarball verification
+script, `test:packages`) and `edc1f5d` (README, package READMEs, ADR-028,
+EVIDENCE, status). `npm run test:packages` passed
 with both packages installed in a temp consumer and `{"sdk":true,
 "provider":true,"reason":"SPLIT"}`.
 

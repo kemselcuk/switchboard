@@ -603,12 +603,13 @@ npm test
 ### v2.1 package install verification
 
 Task 087 packs both workspaces, installs them into a temporary consumer, and
-evaluates through the SDK and the provider against a mock OFREP server.
+evaluates through the SDK and an OpenFeature client against a mock OFREP
+server.
 
 ```text
 npm run test:packages
-Tarball: switchboard-openfeature-provider-2.0.0.tgz (3.5 KiB)
-Tarball: switchboard-sdk-2.0.0.tgz (10.8 KiB)
+Tarball: switchboard-openfeature-provider-2.0.0.tgz (3.7 KiB)
+Tarball: switchboard-sdk-2.0.0.tgz (10.9 KiB)
 Installed packages: @switchboard/sdk@2.0.0, @switchboard/openfeature-provider@2.0.0
 Verification: {"sdk":true,"provider":true,"reason":"SPLIT"}
 Package install check passed.

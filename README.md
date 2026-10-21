@@ -371,8 +371,8 @@ Publishing is a manual release step and is not automated:
 
 1. bump the versions in both package manifests and the workspace dependency,
 2. remove `"private": true` from both packages,
-3. `npm publish --workspace @switchboard/sdk --access public`, then the
-   provider,
+3. `npm publish --workspace @switchboard/sdk --access public`, then
+   `npm publish --workspace @switchboard/openfeature-provider --access public`,
 4. provide npm credentials through your normal local npm configuration (never
    commit them).
 
