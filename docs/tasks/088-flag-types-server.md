@@ -82,16 +82,15 @@ review afterwards.
 
 ## Status
 
-Landed on `main` in `793f4cc` (`feat: add flag value types`). Suite counts for
-the server change (the Task 089 branch only touched client packages and the
-existing official-provider contract test):
+Landed on `main` in `793f4cc` (`feat: add flag value types`). Final suite
+counts after the Task 089 follow-up and review fixes (`52a9422`, `0e5f6be`):
 
 ```text
 npm test
-ℹ tests 156
-ℹ pass 151
+ℹ tests 158
+ℹ pass 152
 ℹ fail 0
-ℹ skipped 5
+ℹ skipped 6
 
 npm run test:contract
 ℹ tests 12
@@ -99,7 +98,7 @@ npm run test:contract
 ℹ fail 0
 ```
 
-The 5 skipped tests are the Postgres integration tests (`DATABASE_URL` unset);
-the Postgres run now includes typed string/JSON evaluation (6/6 with the tag
+The 6 skipped tests are the Postgres integration tests (`DATABASE_URL` unset);
+the Postgres run includes typed string/JSON evaluation (6/6 with the flag
 deletion test).
 Task 089 then added typed SDK/provider coverage; see the Task 089 status.

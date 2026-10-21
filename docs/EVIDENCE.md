@@ -698,10 +698,10 @@ npm run test:workspaces
 # fail 0
 ...
 > @switchboard/sdk@2.0.0 test
-1..33
-# tests 33
+1..34
+# tests 34
 # suites 0
-# pass 33
+# pass 34
 # fail 0
 ...
 ```

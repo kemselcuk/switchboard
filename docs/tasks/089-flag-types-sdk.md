@@ -71,7 +71,8 @@ SDK/provider first; docs; independent review round.
 ## Status
 
 Landed on `main` in `52a9422` (`feat: add typed flag support to sdk and
-provider`). Recorded output is in
+provider`); review fixes are in `0e5f6be` (object cloning, 32 KiB body cap,
+typed Postgres test, docs). Recorded output is in
 `docs/EVIDENCE.md` under "v2.1 flag types (Tasks 088 + 089)":
 
 - SDK tests `34/34`, provider tests `8/8`; both packages build with `tsc`.
