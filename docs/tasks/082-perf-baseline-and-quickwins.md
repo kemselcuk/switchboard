@@ -55,3 +55,32 @@ self-hosted service. Read `AGENTS.md`, `docs/EXPANSION_PLAN.md`, and
 
 - Small commits, `npm test` per change, real output into EVIDENCE, push.
 - New decision records for the readiness probe and the API-key cache.
+
+## Status (2026-10-21)
+
+Implemented and landed on `main`:
+
+- `9879c25` — `/readyz` pings the configured storage (Postgres via Kysely,
+  SQLite via a `SELECT 1`) and returns `503` + `EVALUATION_UNAVAILABLE` when
+  the probe fails; `/healthz` stays a cheap liveness check.
+- `ccda627` — `DATABASE_POOL_MAX` (integer `>= 1`) sizes the Postgres pool;
+  missing or invalid values keep the `pg` default.
+- `45f65de` — 5-second in-memory API-key prefix cache with local invalidation
+  on create/revoke; only found records are cached, and flag-config reads stay
+  uncached (ADR-007 untouched).
+
+Evidence from the recording run (`docs/EVIDENCE.md`):
+
+- `npm test`: 118 tests, 115 pass, 3 skipped (the Postgres tests without
+  `DATABASE_URL`), 0 fail.
+- SQLite, `DURATION=10`, `CONNECTIONS=10`: single-flag 6784.3 → 7467.7 req/s;
+  bulk 6200.6 → 9593.5 req/s.
+- Postgres, `DURATION=10`, `CONNECTIONS=10`: single-flag 724.8 → 2337.9 req/s;
+  bulk 1243 → 2067.3 req/s.
+- Also green: `test:contract` 11/11, `test:workspaces` 3/3 (provider) and 5/5
+  (SDK), `test:db` 3/3; `npm audit` and `npm audit --omit=dev` both report
+  `found 0 vulnerabilities`.
+
+Still out of this task: flag-config caching (needs an ADR-007 revision), SDK
+bulk/ETag, rate limiting, metrics, and the remaining v2.1 features; each needs
+its own task brief and, where required, an expansion-plan update first.

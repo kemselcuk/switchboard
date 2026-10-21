@@ -13,7 +13,7 @@ evidence. All sections are filled with real output.
 - Release: `v2.0.0` (tag after review findings close)
 - GitHub: https://github.com/kemselcuk/switchboard
 
-## v2.0.0 review follow-up evidence (current)
+## v2.0.0 review follow-up evidence (as recorded at release)
 
 This section records the follow-up work that closed the independent v2 review
 starting from commit `ae8e8fa`. Commands were run from the repository root on
@@ -202,6 +202,137 @@ Scenario: bulk-flags
 `npm audit`: `found 0 vulnerabilities` (the first attempt used `autocannon`
 as a dev dependency; it pulled a vulnerable `uuid` and was replaced by the
 built-in load driver before commit).
+
+### What landed
+
+The quick wins after that baseline are `/readyz`, which pings the configured
+storage on every probe and answers `503` + `EVALUATION_UNAVAILABLE` when it
+fails while `/healthz` stays a cheap liveness check (`9879c25`);
+`DATABASE_POOL_MAX`, an optional integer `>= 1` that sizes the Postgres pool
+and keeps the `pg` default when unset or invalid (`ccda627`); and a 5-second
+in-memory API-key prefix cache that is invalidated locally on create and
+revoke (`45f65de`). Flag-config reads are still uncached; ADR-007 is
+untouched.
+
+### After quick wins — SQLite
+
+Recorded on 2026-10-21, `DURATION=10`, `CONNECTIONS=10`:
+
+```text
+BENCH_DURATION=10 npm run bench
+Dialect: sqlite
+Connections: 10, duration: 10s per scenario
+
+Scenario: single-flag (bench-flag)
+  Requests/sec: 7467.7
+  Latency avg: 1.33 ms
+  Latency p50: 1 ms
+  Latency p99: 7.72 ms
+  Errors: 0, non-2xx: 0
+
+Scenario: bulk-flags
+  Requests/sec: 9593.5
+  Latency avg: 1.03 ms
+  Latency p50: 0.97 ms
+  Latency p99: 2.23 ms
+  Errors: 0, non-2xx: 0
+```
+
+### After quick wins — Postgres
+
+Recorded on 2026-10-21, `DURATION=10`, `CONNECTIONS=10`:
+
+```text
+BENCH_DURATION=10 DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run bench
+Dialect: postgres
+Connections: 10, duration: 10s per scenario
+
+Scenario: single-flag (bench-flag)
+  Requests/sec: 2337.9
+  Latency avg: 4.27 ms
+  Latency p50: 3.74 ms
+  Latency p99: 14.41 ms
+  Errors: 0, non-2xx: 0
+
+Scenario: bulk-flags
+  Requests/sec: 2067.3
+  Latency avg: 4.82 ms
+  Latency p50: 4.25 ms
+  Latency p99: 10.37 ms
+  Errors: 0, non-2xx: 0
+```
+
+### v2.1 quick wins — test suites
+
+All suites below were run on 2026-10-21 from commit `45f65de`.
+
+```text
+npm test
+ℹ tests 118
+ℹ suites 0
+ℹ pass 115
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+```
+
+The 3 skipped tests are the Postgres integration tests, which run when
+`DATABASE_URL` is set (see the `test:db` block below).
+
+```text
+npm run test:contract
+ℹ tests 11
+ℹ pass 11
+ℹ fail 0
+```
+
+`npm run test:workspaces` builds both packages and runs their TAP suites; the
+real tails of that single run are:
+
+```text
+> @switchboard/openfeature-provider@2.0.0 test
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 298.498708
+```
+
+```text
+> @switchboard/sdk@2.0.0 test
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 397.878916
+```
+
+```text
+DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run test:db
+✔ maps a Postgres storage failure to 503 (167.724875ms)
+✔ Postgres migrations and v2 evaluation flow (66.546667ms)
+✔ Postgres covers migration, legacy routes, isolation and revocation (72.384333ms)
+ℹ tests 3
+ℹ pass 3
+ℹ fail 0
+```
+
+```text
+npm audit --omit=dev
+found 0 vulnerabilities
+
+npm audit
+found 0 vulnerabilities
+```
 
 ## Historical v1 evidence
 
