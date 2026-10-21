@@ -86,7 +86,7 @@ review round at the end.
 
 Landed on `main`:
 
-- `38959e5` — SDK core: bulk evaluation, per-context cache, `ETag` / `304`
+- `9ab77b8` — SDK core: bulk evaluation, per-context cache, `ETag` / `304`
   refresh, bounded retries.
 - `c367a82` — bounded LRU cache, opt-in polling, `close()`, cache TTL and
   eviction coverage.
