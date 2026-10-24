@@ -159,6 +159,63 @@ test('typed OFREP responses match the official value schemas', async (t) => {
   assert.equal(validator('objectFlag')(byKey['object-flag']), true);
 });
 
+test('TARGETING_MATCH OFREP responses match the official schema', async (t) => {
+  const { app } = await createV2App(t);
+  await createProject(app);
+  await createEnvironment(app, 'demo');
+  await createFlag(app, 'demo', 'production', {
+    key: 'targeted',
+    type: 'string',
+    onValue: 'dark',
+    offValue: 'light',
+    enabled: true,
+    rolloutPercentage: 0,
+  });
+  const segment = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects/demo/segments',
+    headers: { authorization: 'Bearer test-admin-token' },
+    payload: {
+      key: 'beta-users',
+      name: 'Beta users',
+      conditions: [{ attribute: 'plan', operator: 'eq', value: 'beta' }],
+    },
+  });
+  assert.equal(segment.statusCode, 201);
+  const rules = await app.inject({
+    method: 'PUT',
+    url: '/api/v1/projects/demo/environments/production/flags/targeted/rules',
+    headers: { authorization: 'Bearer test-admin-token' },
+    payload: { rules: [{ segmentKey: 'beta-users', action: 'on' }] },
+  });
+  assert.equal(rules.statusCode, 200);
+
+  const key = await createApiKey(app, 'demo', 'production');
+  const response = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/targeted',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1', plan: 'beta' } },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().value, 'dark');
+  assert.equal(response.json().reason, 'TARGETING_MATCH');
+  assert.equal(response.json().variant, 'on');
+  assert.equal(validator('stringFlag')(response.json()), true);
+
+  const bulk = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: { 'x-api-key': key.key },
+    payload: { context: { targetingKey: 'user-1', plan: 'beta' } },
+  });
+
+  assert.equal(bulk.statusCode, 200);
+  assert.equal(bulk.json().flags[0].reason, 'TARGETING_MATCH');
+  assert.equal(validator('stringFlag')(bulk.json().flags[0]), true);
+});
+
 test('OFREP not-found response matches the official schema', async (t) => {
   const { app } = await createV2App(t);
   await createProject(app);

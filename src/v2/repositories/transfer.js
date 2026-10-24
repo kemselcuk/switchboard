@@ -6,6 +6,7 @@ import {
   flagValuesError,
   V2_KEY_PATTERN,
 } from '../schemas.js';
+import { conditionsError, rulesError } from '../targeting.js';
 import { nextLegacyId } from './legacy-ids.js';
 
 export const EXPORT_FORMAT = 'switchboard-v2-export';
@@ -64,6 +65,14 @@ function assertFlagValues(type, flag) {
   }
 }
 
+function assertConditions(conditions, label) {
+  const message = conditionsError(conditions, label);
+
+  if (message) {
+    throw invalid(message);
+  }
+}
+
 function storedValue(type, value) {
   return type === 'boolean' ? null : JSON.stringify(value);
 }
@@ -103,6 +112,34 @@ function validateExport(data) {
       throw invalid(`Duplicate project key: ${project.key}`);
     }
     projectKeys.add(project.key);
+
+    if (project.segments !== undefined) {
+      if (!Array.isArray(project.segments)) {
+        throw invalid(`project ${project.key}: segments must be an array`);
+      }
+
+      const segmentKeys = new Set();
+
+      for (const segment of project.segments) {
+        if (segment === null || typeof segment !== 'object') {
+          throw invalid('Each segment must be an object');
+        }
+
+        assertKey(segment.key, 'segment.key');
+        assertName(segment.name, 'segment.name');
+        assertConditions(
+          segment.conditions,
+          `project ${project.key}: segment ${segment.key}: conditions`,
+        );
+
+        if (segmentKeys.has(segment.key)) {
+          throw invalid(
+            `project ${project.key}: duplicate segment key ${segment.key}`,
+          );
+        }
+        segmentKeys.add(segment.key);
+      }
+    }
 
     if (!Array.isArray(project.environments)) {
       throw invalid(`project ${project.key}: environments must be an array`);
@@ -157,6 +194,14 @@ function validateExport(data) {
 
         assertRollout(flag.rolloutPercentage, `flag ${flag.key}: rolloutPercentage`);
 
+        if (flag.rules !== undefined) {
+          const message = rulesError(flag.rules, `flag ${flag.key}: rules`);
+
+          if (message) {
+            throw invalid(message);
+          }
+        }
+
         if (flagKeys.has(flag.key)) {
           throw invalid(
             `environment ${project.key}/${environment.key}: duplicate flag key ${flag.key}`,
@@ -172,7 +217,18 @@ function toPercent(basisPoints) {
   return Number((basisPoints / 1000).toFixed(3));
 }
 
-function toExportedFlag(flag) {
+function toExportedRule(rule) {
+  if (typeof rule.segment_key === 'string') {
+    return { segmentKey: rule.segment_key, action: rule.action };
+  }
+
+  return {
+    conditions: JSON.parse(rule.inline_conditions),
+    action: rule.action,
+  };
+}
+
+function toExportedFlag(flag, rules) {
   const type = flag.type ?? 'boolean';
   const exported = {
     key: flag.key,
@@ -186,6 +242,7 @@ function toExportedFlag(flag) {
     updatedAt: flag.config_updated_at > flag.flag_updated_at
       ? flag.config_updated_at
       : flag.flag_updated_at,
+    rules: rules.map(toExportedRule),
   };
 
   if (type !== 'boolean') {
@@ -214,6 +271,13 @@ export async function exportConfiguration(db) {
       .orderBy('created_at', 'asc')
       .orderBy('id', 'asc')
       .execute();
+    const segments = await db
+      .selectFrom('segments')
+      .selectAll()
+      .where('project_id', '=', project.id)
+      .orderBy('created_at', 'asc')
+      .orderBy('key', 'asc')
+      .execute();
     const exportedEnvironments = [];
 
     for (const environment of environments) {
@@ -221,6 +285,7 @@ export async function exportConfiguration(db) {
         .selectFrom('flags')
         .innerJoin('flag_configs', 'flag_configs.flag_id', 'flags.id')
         .select([
+          'flags.id as flag_id',
           'flags.key',
           'flags.type',
           'flags.description',
@@ -238,11 +303,36 @@ export async function exportConfiguration(db) {
         .orderBy('flags.created_at', 'asc')
         .orderBy('flags.id', 'asc')
         .execute();
+      const ruleRows = await db
+        .selectFrom('flag_rules')
+        .innerJoin('flags', 'flags.id', 'flag_rules.flag_id')
+        .leftJoin('segments', 'segments.id', 'flag_rules.segment_id')
+        .select([
+          'flag_rules.flag_id',
+          'flag_rules.action',
+          'flag_rules.conditions as inline_conditions',
+          'segments.key as segment_key',
+        ])
+        .where('flag_rules.environment_id', '=', environment.id)
+        .where('flags.project_id', '=', project.id)
+        .orderBy('flag_rules.position', 'asc')
+        .execute();
+      const rulesByFlag = new Map();
+
+      for (const rule of ruleRows) {
+        const rules = rulesByFlag.get(rule.flag_id) ?? [];
+
+        rules.push(rule);
+        rulesByFlag.set(rule.flag_id, rules);
+      }
 
       exportedEnvironments.push({
         key: environment.key,
         name: environment.name,
-        flags: flags.map(toExportedFlag),
+        flags: flags.map((flag) => toExportedFlag(
+          flag,
+          rulesByFlag.get(flag.flag_id) ?? [],
+        )),
       });
     }
 
@@ -250,6 +340,11 @@ export async function exportConfiguration(db) {
       key: project.key,
       name: project.name,
       environments: exportedEnvironments,
+      segments: segments.map((segment) => ({
+        key: segment.key,
+        name: segment.name,
+        conditions: JSON.parse(segment.conditions),
+      })),
     });
   }
 
@@ -282,6 +377,44 @@ async function applyImport(trx, data, summary) {
       .selectAll()
       .where('key', '=', project.key)
       .executeTakeFirstOrThrow();
+
+    for (const segment of project.segments ?? []) {
+      summary.totalSegments += 1;
+
+      const conditions = JSON.stringify(segment.conditions);
+      const existing = await trx
+        .selectFrom('segments')
+        .selectAll()
+        .where('project_id', '=', projectRow.id)
+        .where('key', '=', segment.key)
+        .executeTakeFirst();
+
+      if (!existing) {
+        await trx
+          .insertInto('segments')
+          .values({
+            id: randomUUID(),
+            project_id: projectRow.id,
+            key: segment.key,
+            name: segment.name,
+            conditions,
+            created_at: now,
+            updated_at: now,
+          })
+          .execute();
+        summary.segmentsCreated += 1;
+      } else if (
+        existing.name !== segment.name
+        || existing.conditions !== conditions
+      ) {
+        await trx
+          .updateTable('segments')
+          .set({ name: segment.name, conditions, updated_at: now })
+          .where('id', '=', existing.id)
+          .execute();
+        summary.segmentsUpdated += 1;
+      }
+    }
 
     for (const environment of project.environments) {
       await trx
@@ -399,6 +532,83 @@ async function applyImport(trx, data, summary) {
             .execute();
           summary.configsUpdated += 1;
         }
+
+        if (flag.rules !== undefined) {
+          summary.totalRules += flag.rules.length;
+
+          const desired = [];
+
+          for (const rule of flag.rules) {
+            if (rule.segmentKey !== undefined) {
+              const segment = await trx
+                .selectFrom('segments')
+                .select('id')
+                .where('project_id', '=', projectRow.id)
+                .where('key', '=', rule.segmentKey)
+                .executeTakeFirst();
+
+              if (!segment) {
+                throw invalid(
+                  `flag ${flag.key}: segment ${rule.segmentKey} not found in project ${project.key}`,
+                );
+              }
+
+              desired.push({
+                segmentId: segment.id,
+                conditions: null,
+                action: rule.action,
+              });
+            } else {
+              desired.push({
+                segmentId: null,
+                conditions: JSON.stringify(rule.conditions),
+                action: rule.action,
+              });
+            }
+          }
+
+          const existingRules = await trx
+            .selectFrom('flag_rules')
+            .select(['segment_id', 'conditions', 'action'])
+            .where('flag_id', '=', flagRow.id)
+            .where('environment_id', '=', environmentRow.id)
+            .orderBy('position', 'asc')
+            .execute();
+          const desiredSignature = JSON.stringify(desired);
+          const existingSignature = JSON.stringify(existingRules.map((rule) => ({
+            segmentId: rule.segment_id ?? null,
+            conditions: rule.conditions ?? null,
+            action: rule.action,
+          })));
+
+          if (desiredSignature !== existingSignature) {
+            await trx
+              .deleteFrom('flag_rules')
+              .where('flag_id', '=', flagRow.id)
+              .where('environment_id', '=', environmentRow.id)
+              .execute();
+
+            if (desired.length > 0) {
+              await trx
+                .insertInto('flag_rules')
+                .values(desired.map((rule, position) => ({
+                  id: randomUUID(),
+                  flag_id: flagRow.id,
+                  environment_id: environmentRow.id,
+                  position,
+                  segment_id: rule.segmentId,
+                  conditions: rule.conditions,
+                  action: rule.action,
+                  created_at: now,
+                  updated_at: now,
+                })))
+                .execute();
+            }
+
+            summary.rulesReplaced += 1;
+            summary.rulesCreated += desired.length;
+          }
+        }
       }
     }
 
@@ -417,10 +627,16 @@ export async function importConfiguration(db, data, { dryRun = false } = {}) {
     flagsUpdated: 0,
     configsCreated: 0,
     configsUpdated: 0,
+    segmentsCreated: 0,
+    segmentsUpdated: 0,
+    rulesCreated: 0,
+    rulesReplaced: 0,
     totalProjects: 0,
     totalEnvironments: 0,
     totalFlags: 0,
     totalConfigs: 0,
+    totalSegments: 0,
+    totalRules: 0,
   };
 
   try {

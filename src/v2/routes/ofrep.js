@@ -4,27 +4,45 @@ import { normalizeError, sendError } from '../../errors.js';
 import { createApiKeyAuthHook } from '../api-key-auth.js';
 import { evaluateFlag } from '../evaluator.js';
 import { createFlagRepository } from '../repositories/flags.js';
+import { createTargetingRepository } from '../repositories/targeting.js';
 import {
   ofrepEvaluationBody,
   ofrepFlagParams,
 } from '../schemas.js';
+import { contextFingerprint } from '../targeting.js';
 
-function evaluationKey(flag, context) {
+function ruleSignature(rule) {
+  return {
+    segmentKey: rule.segmentKey ?? null,
+    conditions: rule.conditions ?? null,
+    action: rule.action,
+  };
+}
+
+function evaluationKey(flag) {
   return [
     flag.key,
-    context?.targetingKey ?? 'anonymous',
     flag.rolloutBasisPoints,
     flag.enabled,
     flag.type,
     JSON.stringify(flag.onValue),
     JSON.stringify(flag.offValue),
+    JSON.stringify((flag.rules ?? []).map(ruleSignature)),
   ].join(':');
 }
 
-function etagFor(projectKey, flags, context) {
-  const value = `${projectKey}|${flags
-    .map((flag) => evaluationKey(flag, context))
-    .join('|')}`;
+function etagFor(projectKey, flags, context, segments) {
+  const segmentKey = JSON.stringify(segments.map((segment) => ({
+    key: segment.key,
+    name: segment.name,
+    conditions: segment.conditions,
+  })));
+  const value = [
+    projectKey,
+    contextFingerprint(context),
+    segmentKey,
+    flags.map(evaluationKey).join('|'),
+  ].join('|');
 
   const hash = createHash('sha256')
     .update(value, 'utf8')
@@ -109,6 +127,7 @@ function evaluationResponse(flag, result) {
 
 export async function ofrepRoutes(app, { db }) {
   const flags = createFlagRepository(db);
+  const targeting = createTargetingRepository(db);
 
   app.setErrorHandler(ofrepErrorHandler);
   app.addHook('onRequest', createApiKeyAuthHook(db));
@@ -135,10 +154,15 @@ export async function ofrepRoutes(app, { db }) {
         });
       }
 
+      const [rules, segments] = await Promise.all([
+        targeting.listRules(projectId, environmentId, flag.id),
+        targeting.listSegments(projectId),
+      ]);
       const result = evaluateFlag({
         projectKey,
-        flag,
+        flag: { ...flag, rules },
         context,
+        segments,
       });
 
       app.metrics.recordEvaluation(result.reason);
@@ -153,19 +177,28 @@ export async function ofrepRoutes(app, { db }) {
     async (request, reply) => {
       const { projectId, projectKey, environmentId } = request.apiKeyContext;
       const context = request.body.context;
-      const list = await flags.listFlags(projectId, environmentId);
-      const etag = etagFor(projectKey, list, context);
+      const [list, segments, rulesByFlag] = await Promise.all([
+        flags.listFlags(projectId, environmentId),
+        targeting.listSegments(projectId),
+        targeting.listRulesForEnvironment(projectId, environmentId),
+      ]);
+      const evaluationFlags = list.map((flag) => ({
+        ...flag,
+        rules: rulesByFlag.get(flag.id) ?? [],
+      }));
+      const etag = etagFor(projectKey, evaluationFlags, context, segments);
       const ifNoneMatch = request.headers['if-none-match'];
 
       if (matchesEtag(ifNoneMatch, etag)) {
         return reply.code(304).header('ETag', etag).send();
       }
 
-      const evaluations = list.map((flag) => {
+      const evaluations = evaluationFlags.map((flag) => {
         const result = evaluateFlag({
           projectKey,
           flag,
           context,
+          segments,
         });
 
         app.metrics.recordEvaluation(result.reason);

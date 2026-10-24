@@ -756,6 +756,92 @@ npm run test:contract
 ℹ todo 0
 ```
 
+## v2.1 targeting rules (Task 090)
+
+Task 090 added project segments and ordered per-flag/environment rules.
+Evaluation is disabled → first matching rule (`TARGETING_MATCH`, variant
+`on`/`off`) → deterministic `SPLIT` rollout. Conditions are ANDed `eq`
+comparisons with strict typed equality; each segment holds 0..20 conditions and
+each flag/environment holds 0..50 rules. Bulk ETags include rules and segments,
+segment deletion is blocked while referenced, flag deletion cascades rules, and
+version-1 exports include both. The legacy `/api/flags` and `/api/evaluate`
+paths remain boolean-only and ignore rules.
+
+An independent review round found one blocker (the bulk ETag did not include
+non-`targetingKey` context attributes, so different contexts could share a
+`304`) and several hardening gaps. The final branch includes a canonical
+full-context ETag fingerprint, an exactly-one internal rule shape, a larger
+rules `PUT` body limit, migration checks for action/position, a controlled
+`409 RULE_CONFLICT` on concurrent replacement, and clearer import semantics.
+
+Commands were run from the repository root on 2026-10-21.
+
+```text
+npm test
+ℹ tests 187
+ℹ suites 0
+ℹ pass 180
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 7
+ℹ todo 0
+```
+
+The 7 skipped tests are the Postgres integration tests. The new SQLite suite is
+`test/v2/targeting.test.js` (26 tests), including segment/rule validation,
+first-match order, strict equality, missing attributes, `targetingKey` presence
+vs the anonymous roll-out default, disabled precedence, typed on/off values,
+per-environment rules, full-context ETag scoping, the 50×20 body limit,
+export/import and rule clearing, project isolation, auth, and the legacy
+non-interference check. `test/v2/schema.test.js` also proves the database
+constraints for exactly one rule target, valid action, non-negative position,
+and unique positions.
+
+```text
+npm run test:contract
+✔ TARGETING_MATCH OFREP responses match the official schema
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+```
+
+```text
+npm run test:workspaces
+@switchboard/openfeature-provider
+# tests 8
+# pass 8
+# fail 0
+@switchboard/sdk
+# tests 34
+# pass 34
+# fail 0
+```
+
+```text
+DATABASE_URL=postgres://switchboard:switchboard@127.0.0.1:5433/switchboard npm run test:db
+✔ Postgres stores and evaluates targeting segments and rules
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+```
+
+End-to-end SQLite check with a `beta-users` segment and
+`[{segmentKey:"beta-users",action:"on"}]` at rollout 0:
+
+```text
+{"context":{"targetingKey":"user-7","plan":"beta"},"status":200,"key":"new-checkout","value":true,"reason":"TARGETING_MATCH","variant":"on"}
+{"context":{"targetingKey":"user-7","plan":"free"},"status":200,"key":"new-checkout","value":false,"reason":"SPLIT","variant":"disabled"}
+bulk 200 "017f5ba7fa4c2f90" {"flags":[{"key":"new-checkout","value":true,"reason":"TARGETING_MATCH","variant":"on"}],"metadata":{"version":"\"017f5ba7fa4c2f90\""}}
+```
+
 ## Historical v1 evidence
 
 ## 1. Automated tests

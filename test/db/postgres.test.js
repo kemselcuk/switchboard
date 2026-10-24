@@ -511,3 +511,145 @@ test('Postgres evaluates string and JSON flags', { skip }, async (t) => {
   assert.deepEqual(config.json().value, { nested: 2 });
   assert.equal(config.json().variant, 'off');
 });
+
+
+test('Postgres stores and evaluates targeting segments and rules', { skip }, async (t) => {
+  const v2 = await initializeV2Database({ databaseUrl: DATABASE_URL });
+  const app = buildApp({ v2, adminToken: 'postgres-test-token' });
+  const auth = { authorization: 'Bearer postgres-test-token' };
+  const suffix = randomUUID().slice(0, 8);
+  const projectKey = `pgtarget-${suffix}`;
+
+  t.after(() => app.close());
+
+  const project = await app.inject({
+    method: 'POST',
+    url: '/api/v1/projects',
+    headers: auth,
+    payload: { key: projectKey, name: 'Targeting' },
+  });
+  assert.equal(project.statusCode, 201);
+
+  await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${projectKey}/environments`,
+    headers: auth,
+    payload: { key: 'production', name: 'Production' },
+  });
+  const flag = await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${projectKey}/environments/production/flags`,
+    headers: auth,
+    payload: { key: 'checkout', enabled: true, rolloutPercentage: 0 },
+  });
+  assert.equal(flag.statusCode, 201);
+
+  const segment = await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${projectKey}/segments`,
+    headers: auth,
+    payload: {
+      key: 'beta-users',
+      name: 'Beta users',
+      conditions: [{ attribute: 'plan', operator: 'eq', value: 'beta' }],
+    },
+  });
+  assert.equal(segment.statusCode, 201);
+  assert.deepEqual(segment.json().conditions, [
+    { attribute: 'plan', operator: 'eq', value: 'beta' },
+  ]);
+
+  const rules = await app.inject({
+    method: 'PUT',
+    url: `/api/v1/projects/${projectKey}/environments/production/flags/checkout/rules`,
+    headers: auth,
+    payload: { rules: [{ segmentKey: 'beta-users', action: 'on' }] },
+  });
+  assert.equal(rules.statusCode, 200);
+
+  const key = await app.inject({
+    method: 'POST',
+    url: `/api/v1/projects/${projectKey}/environments/production/api-keys`,
+    headers: auth,
+    payload: { name: 'targeting' },
+  });
+
+  const matched = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/checkout',
+    headers: { 'x-api-key': key.json().key },
+    payload: { context: { targetingKey: 'user-1', plan: 'beta' } },
+  });
+  const fallback = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags/checkout',
+    headers: { 'x-api-key': key.json().key },
+    payload: { context: { targetingKey: 'user-1', plan: 'free' } },
+  });
+
+  assert.equal(matched.statusCode, 200);
+  assert.equal(matched.json().value, true);
+  assert.equal(matched.json().reason, 'TARGETING_MATCH');
+  assert.equal(matched.json().variant, 'on');
+  assert.equal(fallback.statusCode, 200);
+  assert.equal(fallback.json().value, false);
+  assert.equal(fallback.json().reason, 'SPLIT');
+
+  const bulk = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: { 'x-api-key': key.json().key },
+    payload: { context: { targetingKey: 'user-1', plan: 'beta' } },
+  });
+  assert.equal(bulk.statusCode, 200);
+
+  await app.inject({
+    method: 'PUT',
+    url: `/api/v1/projects/${projectKey}/segments/beta-users`,
+    headers: auth,
+    payload: {
+      name: 'Beta users',
+      conditions: [{ attribute: 'plan', operator: 'eq', value: 'beta-2' }],
+    },
+  });
+  const afterSegmentEdit = await app.inject({
+    method: 'POST',
+    url: '/ofrep/v1/evaluate/flags',
+    headers: { 'x-api-key': key.json().key },
+    payload: { context: { targetingKey: 'user-1', plan: 'beta' } },
+  });
+  assert.notEqual(afterSegmentEdit.headers.etag, bulk.headers.etag);
+
+  const blocked = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/projects/${projectKey}/segments/beta-users`,
+    headers: auth,
+  });
+  assert.equal(blocked.statusCode, 409);
+  assert.equal(blocked.json().error.code, 'SEGMENT_IN_USE');
+
+  const deleted = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/projects/${projectKey}/flags/checkout`,
+    headers: auth,
+  });
+  assert.equal(deleted.statusCode, 200);
+
+  const remainingRules = await v2.db
+    .selectFrom('flag_rules')
+    .innerJoin('flags', 'flags.id', 'flag_rules.flag_id')
+    .select('flag_rules.id')
+    .where('flags.project_id', '=', v2.db
+      .selectFrom('projects')
+      .select('id')
+      .where('key', '=', projectKey))
+    .execute();
+  assert.deepEqual(remainingRules, []);
+
+  const removed = await app.inject({
+    method: 'DELETE',
+    url: `/api/v1/projects/${projectKey}/segments/beta-users`,
+    headers: auth,
+  });
+  assert.equal(removed.statusCode, 200);
+});

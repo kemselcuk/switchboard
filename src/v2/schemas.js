@@ -1,4 +1,14 @@
-export const V2_KEY_PATTERN = '^[a-z0-9][a-z0-9._-]{0,63}$';
+import { V2_KEY_PATTERN } from './constants.js';
+import {
+  CONDITION_OPERATORS,
+  MAX_ATTRIBUTE_LENGTH,
+  MAX_CONDITION_STRING_LENGTH,
+  MAX_FLAG_RULES,
+  MAX_SEGMENT_CONDITIONS,
+  RULE_ACTIONS,
+} from './targeting.js';
+
+export { V2_KEY_PATTERN };
 
 export const FLAG_TYPES = Object.freeze([
   'boolean',
@@ -13,6 +23,44 @@ export const MAX_FLAG_JSON_BYTES = 8192;
 const keyProperty = {
   type: 'string',
   pattern: V2_KEY_PATTERN,
+};
+
+const conditionProperty = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['attribute', 'operator', 'value'],
+  properties: {
+    attribute: {
+      type: 'string',
+      minLength: 1,
+      maxLength: MAX_ATTRIBUTE_LENGTH,
+    },
+    operator: { type: 'string', enum: [...CONDITION_OPERATORS] },
+    value: {
+      anyOf: [
+        { type: 'string', maxLength: MAX_CONDITION_STRING_LENGTH },
+        { type: 'number' },
+        { type: 'boolean' },
+      ],
+    },
+  },
+};
+
+const conditionsProperty = {
+  type: 'array',
+  maxItems: MAX_SEGMENT_CONDITIONS,
+  items: conditionProperty,
+};
+
+const ruleProperty = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['action'],
+  properties: {
+    segmentKey: keyProperty,
+    conditions: conditionsProperty,
+    action: { type: 'string', enum: [...RULE_ACTIONS] },
+  },
 };
 
 const nameProperty = {
@@ -137,6 +185,40 @@ export const updateFlagBody = {
   },
 };
 
+export const createSegmentBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['key', 'name', 'conditions'],
+  properties: {
+    key: keyProperty,
+    name: nameProperty,
+    conditions: conditionsProperty,
+  },
+};
+
+export const updateSegmentBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['name', 'conditions'],
+  properties: {
+    name: nameProperty,
+    conditions: conditionsProperty,
+  },
+};
+
+export const replaceRulesBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['rules'],
+  properties: {
+    rules: {
+      type: 'array',
+      maxItems: MAX_FLAG_RULES,
+      items: ruleProperty,
+    },
+  },
+};
+
 export const createApiKeyBody = {
   type: 'object',
   additionalProperties: false,
@@ -180,6 +262,15 @@ export const environmentParams = {
 };
 
 export const projectFlagParams = {
+  type: 'object',
+  required: ['project', 'key'],
+  properties: {
+    project: keyProperty,
+    key: keyProperty,
+  },
+};
+
+export const segmentParams = {
   type: 'object',
   required: ['project', 'key'],
   properties: {
